@@ -1,0 +1,38 @@
+# Test users only (tests/conftest.py). The deployment uses config/users.yaml.
+# Roles: clearance (public < internal < confidential < restricted), row policies, permissions.
+# Row policies are model-language filters over an entity's fields; {attribute} is filled from the user.
+# In production the API gateway authenticates (OIDC/SAML) and maps identity-provider groups to these roles.
+
+roles:
+  analyst:
+    clearance: internal
+    daily_token_budget: 1000000
+  regional_analyst:
+    clearance: internal
+    daily_token_budget: 1000000
+    row_policies:
+      loan: "booking_region == {region}"
+      customer: "region_code == {region}"
+  risk_officer:
+    clearance: confidential
+    approve_reviews: true
+    large_queries: true
+  admin:
+    clearance: restricted
+    approve_reviews: true
+    large_queries: true
+
+users:
+  demo:
+    name: Demo analyst
+    roles: [analyst]
+  ana:
+    name: Ana Ruiz (EMEA credit analyst)
+    roles: [regional_analyst]
+    attributes: {region: EMEA}
+  raj:
+    name: Raj Patel (risk officer)
+    roles: [risk_officer]
+  admin:
+    name: Platform admin
+    roles: [admin]

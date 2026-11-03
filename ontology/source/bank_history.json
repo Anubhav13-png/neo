@@ -1,0 +1,52 @@
+{
+  "note": "FDIC quarterly history (real data, ingested by the FDIC connector) used as historical scenarios.",
+  "terms": [
+    {"id": "term_bank_quarter", "name": "Bank quarter", "kind": "entity", "domain": "banking", "definition": "One quarter of FDIC financials for one source: the whole industry, a holding company's insured banks, or one bank.", "aliases": ["quarter", "quarters", "historical quarter", "scenario", "history"]},
+    {"id": "term_quarterly_net_income", "name": "Quarterly net income", "kind": "metric", "domain": "banking", "definition": "Net income after tax in one quarter.", "aliases": ["profit", "profits", "profitable", "net income", "earnings", "bottom line"]},
+    {"id": "term_pretax_income_quarter", "name": "Quarterly pre-tax operating income", "kind": "metric", "domain": "banking", "definition": "Income before taxes in one quarter, excluding securities gains and discontinued operations. Pre-tax income including securities gains = PTAXNETINCQ + IGLSECQ.", "aliases": ["pre-tax income", "pre-tax profit", "operating income", "earnings before tax"]},
+    {"id": "term_securities_gains_quarter", "name": "Quarterly securities gains", "kind": "metric", "domain": "banking", "definition": "Realized gains (losses) on securities in one quarter.", "aliases": ["securities gains", "investment gains"]},
+    {"id": "term_net_charge_offs", "name": "Net charge-offs", "kind": "metric", "domain": "banking", "definition": "Loans written off as lost in one quarter, net of recoveries.", "aliases": ["charge-offs", "loan losses", "write-offs", "credit losses"]},
+    {"id": "term_total_assets", "name": "Total assets", "kind": "metric", "domain": "banking", "definition": "Total assets at quarter end.", "aliases": ["assets", "size", "balance sheet"]},
+    {"id": "term_domestic_deposits", "name": "US-office deposits", "kind": "metric", "domain": "banking", "definition": "Deposits in US offices at quarter end (FDIC DEPDOM).", "aliases": ["deposits", "domestic deposits"]},
+    {"id": "term_institution_count", "name": "Number of institutions", "kind": "metric", "domain": "banking", "definition": "Institutions filing that quarter; over time it measures consolidation (17,930 in 1984 Q1, 4,313 in 2026 Q2).", "aliases": ["number of banks", "bank count", "consolidation", "institutions"]},
+    {"id": "term_historical_frequency", "name": "Historical frequency", "kind": "concept", "domain": "banking", "definition": "The share of historical quarters in which a condition holds: a probability for the future only if the future resembles those quarters.", "aliases": ["probability", "likelihood", "chance", "odds", "how likely", "how often"]},
+    {"id": "term_break_even", "name": "Break-even shock", "kind": "concept", "domain": "banking", "definition": "The largest shock every quarter in a window survives with non-negative income.", "aliases": ["break-even", "breakeven", "headroom", "absorb", "margin of safety"]}
+  ],
+  "entities": [
+    {"id": "bank_quarter", "name": "Bank quarter (FDIC)", "table": "bank_quarterly", "key": "scenario_key", "grain": "source and quarter", "time_field": "quarter", "label": "source", "domain": "banking", "classification": "public", "owner": "market-data", "definition": "FDIC financials per quarter for: 'industry' (all insured institutions), 'holding_company:1039502' (JPMorgan Chase's insured banks summed, not the consolidated company), 'bank:628' (JPMorgan Chase Bank NA). Amounts in $ thousands.", "aliases": ["fdic", "quarterly financials", "bank history"]}
+  ],
+  "fields": [
+    {"id": "fld_bq_key", "entity": "bank_quarter", "name": "scenario_key", "column": "scenario_key", "unit": "text", "classification": "public"},
+    {"id": "fld_bq_source", "entity": "bank_quarter", "name": "source", "column": "source", "unit": "text", "classification": "public", "description": "'industry', 'holding_company:1039502' (JPMorgan) or 'bank:628'"},
+    {"id": "fld_bq_quarter", "entity": "bank_quarter", "name": "quarter", "term": "term_bank_quarter", "column": "quarter", "unit": "date", "classification": "public"},
+    {"id": "fld_bq_year", "entity": "bank_quarter", "name": "year", "column": "year", "unit": "years", "classification": "public"},
+    {"id": "fld_bq_qtr", "entity": "bank_quarter", "name": "qtr", "column": "qtr", "unit": "count", "classification": "public"},
+    {"id": "fld_bq_netincq", "entity": "bank_quarter", "name": "NETINCQ", "term": "term_quarterly_net_income", "column": "NETINCQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public", "description": "net income in the quarter"},
+    {"id": "fld_bq_netinc", "entity": "bank_quarter", "name": "NETINC", "term": "term_quarterly_net_income", "column": "NETINC", "unit": "USD_thousands", "time_semantics": "ytd", "per_period": "NETINCQ", "classification": "public", "description": "net income year-to-date"},
+    {"id": "fld_bq_ptax", "entity": "bank_quarter", "name": "PTAXNETINCQ", "term": "term_pretax_income_quarter", "column": "PTAXNETINCQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public"},
+    {"id": "fld_bq_gains", "entity": "bank_quarter", "name": "IGLSECQ", "term": "term_securities_gains_quarter", "column": "IGLSECQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public"},
+    {"id": "fld_bq_pretax", "entity": "bank_quarter", "name": "pretax_income", "term": "term_pretax_income_quarter", "expression": "PTAXNETINCQ + IGLSECQ", "dtype": "number", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public", "description": "pre-tax income including securities gains"},
+    {"id": "fld_bq_nim", "entity": "bank_quarter", "name": "NIMQ", "column": "NIMQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public", "description": "net interest income"},
+    {"id": "fld_bq_nonii", "entity": "bank_quarter", "name": "NONIIQ", "column": "NONIIQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public", "description": "noninterest income"},
+    {"id": "fld_bq_nonix", "entity": "bank_quarter", "name": "NONIXQ", "column": "NONIXQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public", "description": "noninterest expense"},
+    {"id": "fld_bq_nco", "entity": "bank_quarter", "name": "NTLNLSQ", "term": "term_net_charge_offs", "column": "NTLNLSQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public"},
+    {"id": "fld_bq_tax", "entity": "bank_quarter", "name": "ITAXQ", "column": "ITAXQ", "unit": "USD_thousands", "time_semantics": "flow", "classification": "public"},
+    {"id": "fld_bq_asset", "entity": "bank_quarter", "name": "ASSET", "term": "term_total_assets", "column": "ASSET", "unit": "USD_thousands", "time_semantics": "stock", "classification": "public"},
+    {"id": "fld_bq_depdom", "entity": "bank_quarter", "name": "DEPDOM", "term": "term_domestic_deposits", "column": "DEPDOM", "unit": "USD_thousands", "time_semantics": "stock", "classification": "public"},
+    {"id": "fld_bq_eq", "entity": "bank_quarter", "name": "EQ", "column": "EQ", "unit": "USD_thousands", "time_semantics": "stock", "classification": "public", "description": "equity capital"},
+    {"id": "fld_bq_banks", "entity": "bank_quarter", "name": "BANKS", "term": "term_institution_count", "column": "BANKS", "unit": "count", "classification": "public"}
+  ],
+  "constraints": [
+    {"id": "con_scenario_history", "kind": "methodology", "severity": "block", "target": "bank_quarter", "triggers": ["likely", "likelihood", "probability", "chance", "odds", "how often", "would still", "stay profitable", "break-even", "breakeven", "absorb", "stress", "what if"], "description": "Likelihoods come only from real historical quarters, never invented distributions. State the window and source; call the result a historical frequency; scale fixed dollar amounts by size across decades (JPMorgan's insured banks: $0.13 trillion of assets in 1992, $4.09 trillion in 2026); holding_company sources sum insured banks only."},
+    {"id": "con_fdic_thousands", "kind": "unit", "severity": "info", "target": "bank_quarter", "description": "FDIC amounts are in thousands of US dollars."}
+  ],
+  "metrics": [
+    {"id": "met_profitable_share", "name": "Share of profitable quarters", "entity": "bank_quarter", "expression": "share(pretax_income > 0)", "unit": "ratio", "description": "Historical frequency of positive pre-tax income."}
+  ],
+  "scenario_sets": [
+    {"id": "ss_jpm_since_2000", "name": "JPMorgan insured banks since 2000", "entity": "bank_quarter", "rows": "source == 'holding_company:1039502' and quarter >= '2000-01-01'", "approved_by": "market-risk", "description": "Every quarter from 2000 Q1 for JPMorgan's insured banks.", "aliases": ["jpmorgan since 2000"]},
+    {"id": "ss_jpm_since_2010", "name": "JPMorgan insured banks since 2010", "entity": "bank_quarter", "rows": "source == 'holding_company:1039502' and quarter >= '2010-01-01'", "approved_by": "market-risk", "description": "Post-crisis quarters of comparable size."},
+    {"id": "ss_industry", "name": "US banking industry since 1984", "entity": "bank_quarter", "rows": "source == 'industry'", "approved_by": "market-risk", "description": "All insured institutions, 1984 Q1 onward.", "aliases": ["industry", "all banks"]},
+    {"id": "ss_gfc", "name": "Global financial crisis", "entity": "bank_quarter", "rows": "quarter >= '2007-07-01' and quarter <= '2009-12-31'", "approved_by": "market-risk", "description": "2007 Q3 to 2009 Q4.", "aliases": ["financial crisis", "2008 crisis", "gfc"]}
+  ]
+}

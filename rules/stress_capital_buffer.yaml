@@ -1,0 +1,10 @@
+id: stress_capital_buffer
+version: 1
+status: draft
+name: Example draft rule (not yet approved; the validator rejects models that use it)
+citation: internal policy draft
+triggers: [capital buffer]
+text: Draft text awaiting compliance review.
+formula: "capital_after_stress >= buffer"
+parameters:
+  buffer: {value: 0.025, unit: ratio}

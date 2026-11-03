@@ -1,0 +1,18 @@
+# Copy to rules/<id>.yaml. Only status: approved rules can be used by models (status: draft | approved | retired).
+id: my_rule
+version: 1
+status: draft
+approved_by: ""
+name: Short human name
+citation: Statute / policy / contract section
+url: https://...
+effective_from: "YYYY-MM-DD"
+effective_to: ""
+terms: []          # ontology term ids the rule is about (used to retrieve it for a question)
+triggers: []       # words that bring the rule into the briefing
+text: >
+  The exact wording, quoted.
+formula: "(condition AND NOT exception) => left_side <= limit"
+parameters:
+  limit: {value: 0, unit: ratio}
+verification: How and when the text was checked.

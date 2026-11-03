@@ -1,0 +1,67 @@
+# Kubernetes sketch. Before scaling past one replica, move the run store from SQLite to Postgres and the lake to a
+# real engine (lake.kind: sqlalchemy) - see README "Production adapters". The API sits behind your OIDC gateway,
+# which sets the trusted X-User header.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: neo-config}
+data:
+  neo.yaml: |
+    lake: {kind: local, root: /data/lake}
+    ontology: {store: json_dir, root: /data/ontology}   # copy ontology/source/ to /data/ontology/source once
+    rules_dir: /app/rules
+    runs: {root: /data/var/runs}
+    governance: {users: /app/config/users.yaml, audit_log: /data/var/audit.jsonl}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: neo-api}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: neo-api}}
+  template:
+    metadata: {labels: {app: neo-api}}
+    spec:
+      containers:
+        - name: api
+          image: neo:0.1.0
+          args: ["neo", "--config", "/etc/neo/neo.yaml", "serve", "--host", "0.0.0.0", "--port", "8080", "--workers", "0"]
+          ports: [{containerPort: 8080}]
+          env: [{name: ANTHROPIC_API_KEY, valueFrom: {secretKeyRef: {name: neo-secrets, key: anthropic-api-key}}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}}
+          volumeMounts: [{name: data, mountPath: /data}, {name: config, mountPath: /etc/neo}]
+      volumes:
+        - {name: data, persistentVolumeClaim: {claimName: neo-data}}
+        - {name: config, configMap: {name: neo-config}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: neo-worker}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: neo-worker}}
+  template:
+    metadata: {labels: {app: neo-worker}}
+    spec:
+      containers:
+        - name: worker
+          image: neo:0.1.0
+          args: ["neo", "--config", "/etc/neo/neo.yaml", "worker"]
+          env: [{name: ANTHROPIC_API_KEY, valueFrom: {secretKeyRef: {name: neo-secrets, key: anthropic-api-key}}}]
+          volumeMounts: [{name: data, mountPath: /data}, {name: config, mountPath: /etc/neo}]
+      volumes:
+        - {name: data, persistentVolumeClaim: {claimName: neo-data}}
+        - {name: config, configMap: {name: neo-config}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: neo-api}
+spec:
+  selector: {app: neo-api}
+  ports: [{port: 80, targetPort: 8080}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: neo-data}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 20Gi}}

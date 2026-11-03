@@ -1,0 +1,27 @@
+# Local stack: one API (with 2 in-process workers) and one extra worker, sharing the lake and run store.
+# First run:  docker compose run --rm api neo init     (needs the deals CSV mounted, or use `neo init --offline`)
+services:
+  api:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      - ANTHROPIC_API_KEY
+    volumes:
+      - lake:/app/data
+      - state:/app/var
+      - ontology:/app/ontology
+      - ../jp_morgan.csv:/jp_morgan.csv:ro
+  worker:
+    build: .
+    command: ["neo", "worker"]
+    environment:
+      - ANTHROPIC_API_KEY
+    volumes:
+      - lake:/app/data
+      - state:/app/var
+      - ontology:/app/ontology
+    depends_on: [api]
+volumes:
+  lake: {}
+  state: {}
+  ontology: {}

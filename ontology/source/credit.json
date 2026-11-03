@@ -1,0 +1,65 @@
+{
+  "note": "Synthetic loan book (clearly synthetic data) for joins, fan-out, governance and scale demos.",
+  "terms": [
+    {"id": "term_loan", "name": "Loan", "kind": "entity", "domain": "credit", "definition": "A credit facility on the book, one row per loan.", "aliases": ["loans", "facility", "facilities", "credit"]},
+    {"id": "term_exposure", "name": "Exposure", "kind": "metric", "domain": "credit", "definition": "Outstanding balance of a loan in US dollars at the snapshot date.", "aliases": ["outstanding balance", "balance", "exposure", "book size", "loan book"]},
+    {"id": "term_pd", "name": "Probability of default (PD)", "kind": "metric", "domain": "credit", "definition": "12-month probability that the borrower defaults, between 0 and 1.", "aliases": ["probability of default", "pd", "default probability"]},
+    {"id": "term_lgd", "name": "Loss given default (LGD)", "kind": "metric", "domain": "credit", "definition": "Share of the exposure lost if the borrower defaults, between 0 and 1.", "aliases": ["loss given default", "lgd"]},
+    {"id": "term_expected_loss", "name": "Expected loss", "kind": "metric", "domain": "credit", "definition": "Balance x PD x LGD: the loss expected over 12 months, an expectation, not a forecast of realised losses.", "aliases": ["expected loss", "el", "expected credit loss"]},
+    {"id": "term_interest_rate", "name": "Interest rate", "kind": "metric", "domain": "credit", "definition": "Contractual annual interest rate.", "aliases": ["rate", "interest rate", "yield", "coupon"]},
+    {"id": "term_loan_status", "name": "Loan status", "kind": "dimension", "domain": "credit", "definition": "current, delinquent (30-89 days past due) or default (90+ days past due).", "aliases": ["status", "delinquent", "defaulted", "default", "past due"]},
+    {"id": "term_product", "name": "Product", "kind": "dimension", "domain": "credit", "definition": "Mortgage, Card, Auto or Commercial.", "aliases": ["product", "product line", "mortgages", "cards", "auto loans", "commercial loans"]},
+    {"id": "term_booking_region", "name": "Booking region", "kind": "dimension", "domain": "credit", "definition": "Region whose books carry the loan (EMEA, AMER, APAC, LATAM).", "aliases": ["region", "booking region", "geography"]},
+    {"id": "term_origination_date", "name": "Origination date", "kind": "dimension", "domain": "credit", "definition": "Date the loan was made.", "aliases": ["origination", "originated", "vintage", "booked"]},
+    {"id": "term_customer", "name": "Customer", "kind": "entity", "domain": "credit", "definition": "A borrower; one customer can have many loans.", "aliases": ["customers", "borrower", "borrowers", "client", "clients"]},
+    {"id": "term_segment", "name": "Customer segment", "kind": "dimension", "domain": "credit", "definition": "Retail, SME or Corporate.", "aliases": ["segment", "retail", "sme", "corporate"]},
+    {"id": "term_income", "name": "Annual income", "kind": "metric", "domain": "credit", "definition": "Declared annual income of the customer in US dollars. Confidential.", "aliases": ["income", "salary", "earnings of customer"]},
+    {"id": "term_customer_name", "name": "Customer name", "kind": "dimension", "domain": "credit", "definition": "Legal name. Restricted personal data.", "aliases": ["name", "customer name"]},
+    {"id": "term_region", "name": "Region", "kind": "entity", "domain": "credit", "definition": "A geographic region of the bank.", "aliases": ["regions"]}
+  ],
+  "entities": [
+    {"id": "loan", "name": "Loan", "table": "loans", "key": "loan_id", "grain": "loan", "time_field": "origination_date", "label": "product", "domain": "credit", "classification": "internal", "owner": "credit-risk-data", "definition": "Every loan on the book at the snapshot date (synthetic).", "aliases": ["loan book", "loans"]},
+    {"id": "customer", "name": "Customer", "table": "customers", "key": "customer_id", "grain": "customer", "label": "segment", "domain": "credit", "classification": "internal", "owner": "customer-data", "definition": "Borrowers (synthetic).", "aliases": ["customers", "borrowers"]},
+    {"id": "region", "name": "Region", "table": "regions", "key": "region_id", "grain": "region", "label": "region_code", "domain": "credit", "classification": "public", "owner": "reference-data", "definition": "Reference list of regions."}
+  ],
+  "fields": [
+    {"id": "fld_loan_id", "entity": "loan", "name": "loan_id", "column": "loan_id", "unit": "id", "classification": "internal"},
+    {"id": "fld_loan_customer_id", "entity": "loan", "name": "customer_id", "column": "customer_id", "unit": "id"},
+    {"id": "fld_loan_region", "entity": "loan", "name": "booking_region", "term": "term_booking_region", "column": "booking_region", "unit": "text"},
+    {"id": "fld_loan_product", "entity": "loan", "name": "product", "term": "term_product", "column": "product", "unit": "text"},
+    {"id": "fld_loan_balance", "entity": "loan", "name": "balance_usd", "term": "term_exposure", "column": "balance_usd", "unit": "USD", "time_semantics": "stock", "description": "outstanding balance at the snapshot date"},
+    {"id": "fld_loan_rate_bp", "entity": "loan", "name": "rate_bp", "term": "term_interest_rate", "column": "rate_bp", "unit": "bp", "description": "annual rate in basis points (150 = 1.5%)"},
+    {"id": "fld_loan_rate", "entity": "loan", "name": "rate", "term": "term_interest_rate", "expression": "rate_bp / 10000", "dtype": "number", "unit": "ratio", "description": "annual rate as a fraction (0.015 = 1.5%)"},
+    {"id": "fld_loan_pd", "entity": "loan", "name": "pd", "term": "term_pd", "column": "pd", "unit": "probability"},
+    {"id": "fld_loan_lgd", "entity": "loan", "name": "lgd", "term": "term_lgd", "column": "lgd", "unit": "ratio"},
+    {"id": "fld_loan_el", "entity": "loan", "name": "expected_loss_usd", "term": "term_expected_loss", "expression": "balance_usd * pd * lgd", "dtype": "number", "unit": "USD", "description": "12-month expected loss"},
+    {"id": "fld_loan_orig", "entity": "loan", "name": "origination_date", "term": "term_origination_date", "column": "origination_date", "unit": "date"},
+    {"id": "fld_loan_status", "entity": "loan", "name": "status", "term": "term_loan_status", "column": "status", "unit": "text"},
+    {"id": "fld_loan_defaulted", "entity": "loan", "name": "is_defaulted", "term": "term_loan_status", "expression": "status == 'default'", "dtype": "bool", "unit": "bool"},
+    {"id": "fld_cust_id", "entity": "customer", "name": "customer_id", "column": "customer_id", "unit": "id"},
+    {"id": "fld_cust_region_id", "entity": "customer", "name": "region_id", "column": "region_id", "unit": "id"},
+    {"id": "fld_cust_region", "entity": "customer", "name": "region_code", "term": "term_booking_region", "column": "region_code", "unit": "text"},
+    {"id": "fld_cust_segment", "entity": "customer", "name": "segment", "term": "term_segment", "column": "segment", "unit": "text"},
+    {"id": "fld_cust_income", "entity": "customer", "name": "annual_income_usd", "term": "term_income", "column": "annual_income_usd", "unit": "USD", "time_semantics": "flow", "classification": "confidential"},
+    {"id": "fld_cust_name", "entity": "customer", "name": "customer_name", "term": "term_customer_name", "column": "customer_name", "unit": "text", "classification": "restricted"},
+    {"id": "fld_cust_onboarded", "entity": "customer", "name": "onboarded_date", "column": "onboarded_date", "unit": "date"},
+    {"id": "fld_region_id", "entity": "region", "name": "region_id", "column": "region_id", "unit": "id", "classification": "public"},
+    {"id": "fld_region_code", "entity": "region", "name": "region_code", "term": "term_booking_region", "column": "region_code", "unit": "text", "classification": "public"},
+    {"id": "fld_region_name", "entity": "region", "name": "region_name", "column": "region_name", "unit": "text", "classification": "public"}
+  ],
+  "relations": [
+    {"id": "rel_loan_customer", "kind": "join", "from_entity": "loan", "to_entity": "customer", "on": [["customer_id", "customer_id"]], "cardinality": "many_to_one", "alias": "cust", "description": "Each loan has one borrower; a customer can have many loans."},
+    {"id": "rel_customer_region", "kind": "join", "from_entity": "customer", "to_entity": "region", "on": [["region_id", "region_id"]], "cardinality": "many_to_one", "alias": "reg", "description": "Each customer belongs to one region."}
+  ],
+  "constraints": [
+    {"id": "con_expected_loss_meaning", "kind": "methodology", "severity": "block", "target": "term_expected_loss", "triggers": ["expected loss", "credit loss", "losses"], "description": "Expected loss is balance x PD x LGD over 12 months: an expectation, not a forecast of realised losses. Say so, and do not add expected losses of different snapshot dates."},
+    {"id": "con_pd_bounds", "kind": "data_quality", "severity": "info", "target": "fld_loan_pd", "description": "PD is a probability between 0 and 1 (0.02 = 2%)."},
+    {"id": "con_default_definition", "kind": "data_quality", "severity": "info", "target": "fld_loan_status", "triggers": ["default", "defaulted"], "description": "status 'default' means 90 or more days past due; 'delinquent' is 30-89 days."},
+    {"id": "con_synthetic_data", "kind": "methodology", "severity": "info", "target": "loan", "description": "The loan book is synthetic demonstration data, not real customers."}
+  ],
+  "metrics": [
+    {"id": "met_total_exposure", "name": "Total exposure", "entity": "loan", "expression": "sum(balance_usd)", "unit": "USD", "description": "Sum of outstanding balances.", "aliases": ["total exposure", "book size"]},
+    {"id": "met_expected_loss", "name": "Expected loss", "entity": "loan", "expression": "sum(expected_loss_usd)", "unit": "USD", "description": "Sum of balance x PD x LGD."},
+    {"id": "met_default_rate", "name": "Default rate", "entity": "loan", "expression": "share(status == 'default')", "unit": "ratio", "description": "Share of loans in default.", "aliases": ["default rate"]}
+  ]
+}

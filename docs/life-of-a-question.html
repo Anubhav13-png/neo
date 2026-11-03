@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Life of a neo Question</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+body { margin: 0; }
+*, *::before, *::after { box-sizing: border-box; }
+/* Layout: a sticky step index on the left, one reading column on the right; one colour per worker (code, LLM, lake, Z3, Lean). */
+:root {
+  --bg: #f5f7fa; --surface: #ffffff; --ink: #172033; --muted: #556079; --line: #dfe4ec;
+  --accent: #1f5fd1; --ex: #f1f5fd; --codebg: #f0f2f6;
+  --code: #3d4a63; --code-bg: #eef1f6;
+  --llm: #9a4a00; --llm-bg: #fdf0e1;
+  --lake: #1652b8; --lake-bg: #e6effd;
+  --z3: #0d6b62; --z3-bg: #e0f4f1;
+  --lean: #8a2463; --lean-bg: #f9e6f1;
+  --ok: #17703a; --ok-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fde8e6;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141c; --surface: #161d28; --ink: #e6eaf2; --muted: #9aa5ba; --line: #263042;
+  --accent: #7aa7ff; --ex: #172238; --codebg: #0c1118;
+  --code: #b7c2d6; --code-bg: #1f2836; --llm: #f3b36b; --llm-bg: #33240f;
+  --lake: #8db8ff; --lake-bg: #13284a; --z3: #6fd6c8; --z3-bg: #0f302c; --lean: #f09bcb; --lean-bg: #3a1830;
+  --ok: #6fdc95; --ok-bg: #133222; --bad: #ff8f84; --bad-bg: #3b1714; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f141c; --surface: #161d28; --ink: #e6eaf2; --muted: #9aa5ba; --line: #263042;
+  --accent: #7aa7ff; --ex: #172238; --codebg: #0c1118;
+  --code: #b7c2d6; --code-bg: #1f2836; --llm: #f3b36b; --llm-bg: #33240f;
+  --lake: #8db8ff; --lake-bg: #13284a; --z3: #6fd6c8; --z3-bg: #0f302c; --lean: #f09bcb; --lean-bg: #3a1830;
+  --ok: #6fdc95; --ok-bg: #133222; --bad: #ff8f84; --bad-bg: #3b1714; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 4.5vw, 3rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; }
+h3 { font-size: 1.05rem; font-family: var(--body); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.muted { color: var(--muted); }
+.label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+header.intro { display: grid; gap: 16px; max-width: 760px; }
+.lede { font-size: 1.12rem; color: var(--muted); }
+.glance { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.glance div { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; min-width: 0; }
+.glance b { font-family: var(--display); font-size: 1.25rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.glance span { font-size: 0.85rem; color: var(--muted); }
+
+.idea { margin-top: 36px; display: grid; gap: 14px; max-width: 820px; }
+.idea p { font-size: 1.08rem; }
+.workers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 6px; }
+.worker { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 4px; }
+.worker p { font-size: 0.9rem; color: var(--muted); }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; padding: 2px 9px;
+  border-radius: 999px; white-space: nowrap; letter-spacing: 0.02em; }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.c-code { color: var(--code); background: var(--code-bg); }
+.c-llm { color: var(--llm); background: var(--llm-bg); }
+.c-lake { color: var(--lake); background: var(--lake-bg); }
+.c-z3 { color: var(--z3); background: var(--z3-bg); }
+.c-lean { color: var(--lean); background: var(--lean-bg); }
+.chip.ok { color: var(--ok); background: var(--ok-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+
+.diagram { margin-top: 40px; display: grid; gap: 10px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.flow { display: block; min-width: 860px; width: 100%; height: auto; }
+.flow .ph { font: 600 11px var(--body); letter-spacing: 0.08em; fill: var(--muted); }
+.flow rect { stroke-width: 1; }
+.flow .code rect { fill: var(--code-bg); stroke: var(--line); }
+.flow .llm rect { fill: var(--llm-bg); stroke: var(--llm); }
+.flow .lake rect { fill: var(--lake-bg); stroke: var(--lake); }
+.flow .z3 rect { fill: var(--z3-bg); stroke: var(--z3); }
+.flow .lean rect { fill: var(--lean-bg); stroke: var(--lean); }
+.flow .sn { font: 700 12.5px var(--body); fill: var(--ink); }
+.flow .sl { font: 500 12.5px var(--body); fill: var(--ink); }
+.flow .st { font: 600 10.5px var(--body); }
+.flow .code .st { fill: var(--code); } .flow .llm .st { fill: var(--llm); } .flow .lake .st { fill: var(--lake); }
+.flow .z3 .st { fill: var(--z3); } .flow .lean .st { fill: var(--lean); }
+.flow .ar { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.flow .loop { stroke: var(--llm); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+.flow .lt { font: 500 11px var(--body); fill: var(--llm); }
+.flow marker path { fill: var(--muted); }
+.flow #ahl path { fill: var(--llm); }
+figcaption { font-size: 0.9rem; color: var(--muted); max-width: 760px; }
+
+.layout { margin-top: 48px; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 48px; align-items: start; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); max-height: calc(100vh - 40px); overflow-y: auto;
+  font-size: 0.88rem; display: grid; gap: 14px; padding-right: 4px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.toc a { display: grid; grid-template-columns: 24px 1fr; gap: 4px; padding: 4px 8px; border-radius: 6px;
+  color: var(--ink); text-decoration: none; }
+nav.toc a span:first-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+nav.toc a:hover { background: var(--surface); }
+nav.toc a.on { background: var(--surface); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
+nav.toc .extra a { grid-template-columns: 1fr; }
+
+main { display: grid; gap: 56px; min-width: 0; }
+.phase { display: grid; gap: 6px; padding-top: 8px; border-top: 2px solid var(--ink); }
+.phase p { color: var(--muted); max-width: 680px; }
+.step { display: grid; gap: 16px; scroll-margin-top: 24px; min-width: 0; }
+.step-head { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; }
+.num { font-family: var(--display); font-size: 2rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1; grid-row: span 2; }
+.step-head .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.one { font-size: 1.1rem; max-width: 680px; }
+.cols { display: grid; gap: 14px; }
+.step ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 700px; }
+.step li::marker { color: var(--muted); }
+.ex { background: var(--ex); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; min-width: 0; }
+.ex > .label { color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; color: var(--muted); font-size: 0.95rem; max-width: 680px; }
+.warn { border-left-color: var(--llm); }
+pre { margin: 0; background: var(--codebg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  font: 0.8rem/1.55 var(--mono); overflow-x: auto; white-space: pre; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+th, td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+.saved { font-size: 0.85rem; color: var(--muted); }
+.saved code { color: var(--ink); }
+.glossary dl { display: grid; grid-template-columns: minmax(130px, max-content) 1fr; gap: 8px 20px; margin: 0; max-width: 820px; }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 0; color: var(--muted); }
+footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 760px; }
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  nav.toc { position: static; max-height: none; overflow: visible; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+}
+@media (max-width: 520px) {
+  .glossary dl { grid-template-columns: 1fr; gap: 2px; }
+  .glossary dd { margin-bottom: 10px; }
+  .num { font-size: 1.6rem; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="intro">
+  <span class="label">neo · question pipeline</span>
+  <h1>Life of a question</h1>
+  <p class="lede">Everything that happens between pressing <b>Ask</b> and reading the answer, step by step, in plain words. The example throughout is a real run on your data: <i>“What is our total exposure on cards?”</i>, asked as Admin.</p>
+</header>
+
+<div class="glance" aria-label="The example run at a glance">
+  <div><b>$125,974,233,615</b><span>total card exposure</span></div>
+  <div><b>50,209</b><span>card loans, of 200,000 loans</span></div>
+  <div><b>Proved</b><span>Z3, then Lean re-checked it</span></div>
+  <div><b>Matched</b><span>independent recomputation</span></div>
+  <div><b>6.2 s</b><span>from Ask to answer</span></div>
+</div>
+
+<section class="idea" aria-labelledby="idea-h">
+  <h2 id="idea-h">The one idea</h2>
+  <p>The language model never calculates anything. Its job is to rewrite your question as a precise <b>model</b>: a short recipe that says which rows to use and which formula to apply, written in the ontology's own names. Code checks the recipe. The data lake computes it with exact whole numbers. Z3 proves the result is the only one possible, and Lean checks Z3's work. At the end the model writes the answer in words, using only facts that code wrote down.</p>
+  <div class="workers">
+    <div class="worker"><span class="chip c-code">Code</span><p>neo's own program. The same input always gives the same output.</p></div>
+    <div class="worker"><span class="chip c-llm">LLM</span><p>Claude. Writes the model, reviews it, writes the final text. Never sees data rows.</p></div>
+    <div class="worker"><span class="chip c-lake">Data lake</span><p>DuckDB over a frozen copy of your tables. Every number is calculated here.</p></div>
+    <div class="worker"><span class="chip c-z3">Z3</span><p>A solver. Proves an answer is the only possible one, finds best values and clashes.</p></div>
+    <div class="worker"><span class="chip c-lean">Lean</span><p>A proof checker with a small trusted core. Re-checks what Z3 decided.</p></div>
+  </div>
+</section>
+
+<figure class="diagram">
+  <div class="scroll">
+  <svg class="flow" viewBox="0 0 1000 352" role="img" aria-label="Fifteen steps in four phases. Understand: steps 1 to 3 by code. Formalise: step 4 by the LLM, step 5 by code; if any check fails, the errors go back to the LLM. Compute and prove: compile, lake, Z3, Lean, independent recomputation. Explain and deliver: LLM review, certificate, LLM answer, routing, saving.">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
+      <marker id="ahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
+    </defs>
+    <text class="ph" x="16" y="36">UNDERSTAND</text>
+    <text class="ph" x="270" y="36">FORMALISE</text>
+    <text class="ph" x="524" y="36">COMPUTE AND PROVE</text>
+    <text class="ph" x="778" y="36">EXPLAIN AND DELIVER</text>
+
+    <g class="code"><rect x="16" y="56" width="206" height="42" rx="6"/><text class="sn" x="26" y="82">1</text><text class="sl" x="46" y="82">Freeze data and meaning</text></g>
+    <g class="code"><rect x="16" y="116" width="206" height="42" rx="6"/><text class="sn" x="26" y="142">2</text><text class="sl" x="46" y="142">Link words to ontology</text></g>
+    <g class="code"><rect x="16" y="176" width="206" height="42" rx="6"/><text class="sn" x="26" y="202">3</text><text class="sl" x="46" y="202">Build the briefing</text></g>
+    <line class="ar" x1="119" y1="98" x2="119" y2="114" marker-end="url(#ah)"/>
+    <line class="ar" x1="119" y1="158" x2="119" y2="174" marker-end="url(#ah)"/>
+
+    <g class="llm"><rect x="270" y="56" width="206" height="42" rx="6"/><text class="sn" x="280" y="82">4</text><text class="sl" x="300" y="82">Write the model</text><text class="st" x="466" y="82" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="270" y="116" width="206" height="42" rx="6"/><text class="sn" x="280" y="142">5</text><text class="sl" x="300" y="142">Check the model</text></g>
+    <line class="ar" x1="373" y1="98" x2="373" y2="114" marker-end="url(#ah)"/>
+
+    <g class="code"><rect x="524" y="56" width="206" height="42" rx="6"/><text class="sn" x="534" y="82">6</text><text class="sl" x="554" y="82">Compile to exact SQL</text></g>
+    <g class="lake"><rect x="524" y="116" width="206" height="42" rx="6"/><text class="sn" x="534" y="142">7</text><text class="sl" x="554" y="142">Compute in the lake</text><text class="st" x="720" y="142" text-anchor="end">lake</text></g>
+    <g class="z3"><rect x="524" y="176" width="206" height="42" rx="6"/><text class="sn" x="534" y="202">8</text><text class="sl" x="554" y="202">Prove with Z3</text><text class="st" x="720" y="202" text-anchor="end">Z3</text></g>
+    <g class="lean"><rect x="524" y="236" width="206" height="42" rx="6"/><text class="sn" x="534" y="262">9</text><text class="sl" x="554" y="262">Re-check with Lean</text><text class="st" x="720" y="262" text-anchor="end">Lean</text></g>
+    <g class="code"><rect x="524" y="296" width="206" height="42" rx="6"/><text class="sn" x="534" y="322">10</text><text class="sl" x="554" y="322">Recompute another way</text></g>
+    <line class="ar" x1="627" y1="98" x2="627" y2="114" marker-end="url(#ah)"/>
+    <line class="ar" x1="627" y1="158" x2="627" y2="174" marker-end="url(#ah)"/>
+    <line class="ar" x1="627" y1="218" x2="627" y2="234" marker-end="url(#ah)"/>
+    <line class="ar" x1="627" y1="278" x2="627" y2="294" marker-end="url(#ah)"/>
+
+    <g class="llm"><rect x="778" y="56" width="206" height="42" rx="6"/><text class="sn" x="788" y="82">11</text><text class="sl" x="812" y="82">Review the model</text><text class="st" x="974" y="82" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="778" y="116" width="206" height="42" rx="6"/><text class="sn" x="788" y="142">12</text><text class="sl" x="812" y="142">Write the certificate</text></g>
+    <g class="llm"><rect x="778" y="176" width="206" height="42" rx="6"/><text class="sn" x="788" y="202">13</text><text class="sl" x="812" y="202">Write the answer</text><text class="st" x="974" y="202" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="778" y="236" width="206" height="42" rx="6"/><text class="sn" x="788" y="262">14</text><text class="sl" x="812" y="262">Route for review</text></g>
+    <g class="code"><rect x="778" y="296" width="206" height="42" rx="6"/><text class="sn" x="788" y="322">15</text><text class="sl" x="812" y="322">Save and audit</text></g>
+    <line class="ar" x1="881" y1="98" x2="881" y2="114" marker-end="url(#ah)"/>
+    <line class="ar" x1="881" y1="158" x2="881" y2="174" marker-end="url(#ah)"/>
+    <line class="ar" x1="881" y1="218" x2="881" y2="234" marker-end="url(#ah)"/>
+    <line class="ar" x1="881" y1="278" x2="881" y2="294" marker-end="url(#ah)"/>
+
+    <path class="ar" d="M222 197 H238 V70 H266" marker-end="url(#ah)"/>
+    <path class="ar" d="M476 137 H500 V70 H520" marker-end="url(#ah)"/>
+    <path class="ar" d="M730 317 H754 V70 H774" marker-end="url(#ah)"/>
+
+    <path class="loop" d="M373 158 V200 H254 V90 H266" marker-end="url(#ahl)"/>
+    <path class="loop" d="M524 200 H373"/>
+    <text class="lt" x="373" y="226" text-anchor="middle">a check fails: the errors go</text>
+    <text class="lt" x="373" y="241" text-anchor="middle">back to the LLM (up to 3 fixes)</text>
+  </svg>
+  </div>
+  <figcaption>The whole run. Grey boxes are neo's own code; coloured boxes name the worker. If the check in step 5, or compiling or proving in steps 6 to 8, fails, the problems go back to the LLM to fix (dashed line).</figcaption>
+</figure>
+
+<div class="layout">
+<nav class="toc" aria-label="Steps">
+  <div><div class="label">Understand</div><ol>
+    <li><a href="#s1"><span>1</span><span>Freeze data and meaning</span></a></li>
+    <li><a href="#s2"><span>2</span><span>Link words to the ontology</span></a></li>
+    <li><a href="#s3"><span>3</span><span>Build the briefing</span></a></li></ol></div>
+  <div><div class="label">Formalise</div><ol>
+    <li><a href="#s4"><span>4</span><span>Write the model</span></a></li>
+    <li><a href="#s5"><span>5</span><span>Check the model</span></a></li></ol></div>
+  <div><div class="label">Compute and prove</div><ol>
+    <li><a href="#s6"><span>6</span><span>Compile to exact SQL</span></a></li>
+    <li><a href="#s7"><span>7</span><span>Compute in the lake</span></a></li>
+    <li><a href="#s8"><span>8</span><span>Prove with Z3</span></a></li>
+    <li><a href="#s9"><span>9</span><span>Re-check with Lean</span></a></li>
+    <li><a href="#s10"><span>10</span><span>Recompute another way</span></a></li></ol></div>
+  <div><div class="label">Explain and deliver</div><ol>
+    <li><a href="#s11"><span>11</span><span>Review the model</span></a></li>
+    <li><a href="#s12"><span>12</span><span>Write the certificate</span></a></li>
+    <li><a href="#s13"><span>13</span><span>Write the answer</span></a></li>
+    <li><a href="#s14"><span>14</span><span>Route for review</span></a></li>
+    <li><a href="#s15"><span>15</span><span>Save and audit</span></a></li></ol></div>
+  <div class="extra"><div class="label">Reference</div><ol>
+    <li><a href="#endings"><span>How a run can end</span></a></li>
+    <li><a href="#glossary"><span>Words used here</span></a></li></ol></div>
+</nav>
+
+<main>
+<!-- ======================= UNDERSTAND ======================= -->
+<div class="phase"><span class="label">Phase 1</span><h2>Understand the question</h2><p>No AI is involved yet. neo freezes the data, finds what your words mean, and decides what the LLM is allowed to know.</p></div>
+
+<section class="step" id="s1">
+  <div class="step-head"><span class="num">1</span><h3>Freeze the data and the meaning</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">Before anything runs, neo takes a picture of the data and of the ontology, so the whole answer uses one consistent version of both.</p>
+  <ul>
+    <li><b>Checks who is asking.</b> There is one user, Admin: the highest clearance (restricted), no row limits, can approve reviews, and has no query size limit.</li>
+    <li><b>Freezes the data.</b> It records the exact version of every table, called the snapshot. Data loaded a second later is not seen by this run.</li>
+    <li><b>Freezes the meaning.</b> It records the ontology version and a fingerprint of each approved rule.</li>
+    <li><b>Starts the record.</b> It creates a run id and writes “question asked” to the audit log.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <table><tr><td>Run</td><td class="mono">run_20261103112042_e63a705a</td></tr>
+    <tr><td>Data snapshot</td><td class="mono">snap_9be31d0acc6bdc9e</td></tr>
+    <tr><td>Ontology version</td><td class="mono">v0001-117ad810</td></tr></table>
+  </div>
+  <p class="note">Why it matters: replaying this run next year gives the same answer, because every later step reloads exactly this snapshot and this ontology version.</p>
+  <p class="saved">Saved: the run record and <code>var/audit.jsonl</code>.</p>
+</section>
+
+<section class="step" id="s2">
+  <div class="step-head"><span class="num">2</span><h3>Link your words to the ontology</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">neo looks up the words of your question in the ontology, the company's dictionary of what the data means.</p>
+  <ul>
+    <li><b>Splits the question into words.</b> Lowercase, punctuation removed, simple plurals reduced (“cards” becomes “card”).</li>
+    <li><b>Exact phrases.</b> Every run of 1 to 6 words is compared with the names and aliases of terms, tables, columns, metrics and history windows. Longer matches score higher: 0.6 plus 0.15 per word, up to 1.0.</li>
+    <li><b>Similar wording.</b> The question is also compared with each object's description, so different wording still finds the right thing. These matches score lower and are kept only above a threshold.</li>
+    <li><b>Unknown words</b> are saved as suggestions for new aliases.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <div class="scroll"><table>
+      <tr><th>Your words</th><th>Ontology object</th><th>Kind</th><th class="r">Score</th></tr>
+      <tr><td>“total exposure”</td><td class="mono">met_total_exposure</td><td>approved metric</td><td class="r">0.90</td></tr>
+      <tr><td>“exposure”</td><td class="mono">term_exposure</td><td>business term</td><td class="r">0.75</td></tr>
+      <tr><td>“exposure”</td><td class="mono">balance_usd</td><td>column (via the term)</td><td class="r">0.75</td></tr>
+      <tr><td>“cards”</td><td class="mono">term_product</td><td>business term</td><td class="r">0.75</td></tr>
+      <tr><td>“cards”</td><td class="mono">product</td><td>column</td><td class="r">0.75</td></tr>
+    </table></div>
+  </div>
+  <p class="note warn">If nothing matches, neo stops here and asks which table you mean (status <code>needs_clarification</code>). The LLM is never asked to guess.</p>
+  <p class="saved">Saved: <code>steps/retrieve.json</code>.</p>
+</section>
+
+<section class="step" id="s3">
+  <div class="step-head"><span class="num">3</span><h3>Build the briefing</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">neo picks the tables the question is about and writes a short briefing for the LLM: only the part of the ontology this question needs.</p>
+  <ul>
+    <li><b>Chooses tables.</b> Each matched word votes for its table. Tables with at least a quarter of the top score are kept (up to 4), plus tables one join away.</li>
+    <li><b>Applies access.</b> Columns above the user's clearance are left out and counted. Row limits for the user are noted. Admin sees every column and every row.</li>
+    <li><b>Gathers context.</b> For each table: columns with unit and meaning, the exact category values read from the data, joins and whether they repeat rows, approved metrics, history windows, business rules (constraints), terms and approved legal rules.</li>
+    <li><b>Writes it as text.</b> This briefing is everything the LLM learns about your data. It contains no data rows.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <p>Main table <code>loan</code>, with <code>customer</code> as a related table. 0 columns hidden. 3 metrics, 4 constraints. An excerpt of what the LLM reads:</p>
+<pre>- entity `loan`: Loan. One row per loan; key `loan_id`; time field origination_date.
+    product [term_product]: text | values: 'Card'; 'Mortgage'; 'Commercial'; 'Auto'
+    balance_usd [term_exposure]: number, USD, level at a point in time — outstanding balance
+## Approved metrics (prefer these formulas)
+- met_total_exposure (loan): Total exposure = `sum(balance_usd)` [USD]
+## Constraints (`block` ones must be addressed in grounding when they apply)
+- con_expected_loss_meaning [block] on term_expected_loss: ... | triggers: expected loss, credit loss</pre>
+  </div>
+  <p class="saved">Saved: the briefing text, in <code>steps/retrieve.json</code>.</p>
+</section>
+
+<!-- ======================= FORMALISE ======================= -->
+<div class="phase"><span class="label">Phase 2</span><h2>Turn it into a precise model</h2><p>The only creative step. The LLM writes the recipe; code checks every part of it before a single query runs.</p></div>
+
+<section class="step" id="s4">
+  <div class="step-head"><span class="num">4</span><h3>Write the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+  <p class="one">Claude rewrites the question as a small, precise model: which rows, which formula, and which kind of answer.</p>
+  <ul>
+    <li><b>What Claude receives:</b> its role (“you never compute answers and never see raw data”), the manual on writing models, the list of allowed functions, the briefing, and your question.</li>
+    <li><b>Checks before sending:</b> the request must contain no data rows; the user's daily token budget (2,000,000 for Admin) must not be used up. Rate-limit errors are retried. Every call is logged with its token count and time.</li>
+    <li><b>What comes back:</b> a JSON model. Its <i>form</i> says what kind of answer this is: a number (value), a table, a top or bottom item (extremum), a list (set), a yes/no check, “is this possible?” (feasibility), “what is the best value?” (optimisation), or “the data cannot answer this”.</li>
+    <li><b>Grounding:</b> the model also lists the business terms it relied on and how it handled each enforced rule.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+<pre>{ "form": "value",
+  "interpretation": "Total outstanding balance of card loans, in USD, and how many card loans there are.",
+  "universe": {"entity": "loan"},
+  "rows": "product == 'Card'",
+  "target": {"columns": {"exposure_usd": "sum(balance_usd)", "loans": "count()"}} }</pre>
+    <p>In plain words: take the loan table, keep the rows where product is Card, and report the total of <code>balance_usd</code> and the number of rows. <code>'Card'</code> is copied from the category values in the briefing, not guessed.</p>
+  </div>
+  <p class="saved">Saved: <code>attempts/attempt_1.json</code>, and the LLM call in the call log.</p>
+</section>
+
+<section class="step" id="s5">
+  <div class="step-head"><span class="num">5</span><h3>Check the model</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">Before any query runs, neo checks the model against the ontology and the user's rights, and collects every problem, not just the first.</p>
+  <div class="scroll"><table>
+    <tr><th>Check</th><th>What it stops</th></tr>
+    <tr><td>Real names</td><td>A table, column or join that does not exist (“did you mean <code>balance_usd</code>?”)</td></tr>
+    <tr><td>Access</td><td>Using a column or table above the user's clearance</td></tr>
+    <tr><td>Units</td><td>Adding thousands to dollars, or a percent to a ratio, without converting</td></tr>
+    <tr><td>Time</td><td>Adding a balance (a level on a date) to an amount over a period; using a year-to-date figure as one month</td></tr>
+    <tr><td>Double counting</td><td>Summing the “one” side of a one-to-many join, which would count it many times</td></tr>
+    <tr><td>Row limits</td><td>Added by code to every query; the LLM cannot remove them (Admin has none)</td></tr>
+    <tr><td>Rules</td><td>Citing a rule that is not approved or not in force</td></tr>
+    <tr><td>Grounding</td><td>Ignoring an enforced (block) constraint. One applies when a trigger word is in the question or the model reads a column it covers; it must be marked applied (with how) or not applicable (with why)</td></tr>
+    <tr><td>Size</td><td>Scanning over 50 million rows without permission for large queries (Admin has it)</td></tr>
+  </table></div>
+  <div class="ex"><span class="label">In the example</span>
+    <p>Passed on the first attempt. No enforced constraint applied: the question does not say “expected loss”, and the model does not read PD.</p>
+  </div>
+  <p class="note warn"><b>If it fails:</b> the full list of errors goes back to Claude with “The model was rejected. Fix every problem below.” Claude gets up to 3 fixes (4 attempts in all). Problems found while compiling or proving (steps 6 to 8) go back the same way. If it still fails, the status is <code>no_model</code> and you see the last problems. No answer is invented.</p>
+</section>
+
+<!-- ======================= COMPUTE AND PROVE ======================= -->
+<div class="phase"><span class="label">Phase 3</span><h2>Compute and prove</h2><p>The lake calculates, Z3 proves, Lean checks Z3, and a second program recomputes the answer. All four must agree.</p></div>
+
+<section class="step" id="s6">
+  <div class="step-head"><span class="num">6</span><h3>Compile to exact SQL</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">The model becomes SQL, written so that no number is ever rounded.</p>
+  <ul>
+    <li><b>Real tables:</b> table names come from the ontology and point at the frozen snapshot, not the live table.</li>
+    <li><b>Fractions, not decimals:</b> every number is kept as a pair of whole numbers, top and bottom of a fraction. A decimal like 0.012345 becomes 12345 / 1000000.</li>
+    <li><b>No division in comparisons:</b> a/b &gt; c/d is decided by comparing whole-number products, so nothing is rounded.</li>
+    <li><b>Big integers:</b> totals use 128-bit whole numbers. If a number would overflow, the query stops with an error instead of rounding.</li>
+    <li><b>Missing values</b> are counted and reported, never silently treated as zero.</li>
+    <li><b>Joins</b> come from ontology relations, and any row limits go into every <code>WHERE</code>.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+<pre>SELECT SUM(CAST(t0."balance_usd" AS HUGEINT)),                       -- the total, as a whole number
+       COUNT(*) FILTER (WHERE CAST(t0."balance_usd" AS HUGEINT) IS NULL), -- missing balances
+       COUNT(*)                                                       -- the number of loans
+FROM s_9be31d0acc6bdc9e."loans" t0                                    -- the frozen snapshot
+WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
+  </div>
+</section>
+
+<section class="step" id="s7">
+  <div class="step-head"><span class="num">7</span><h3>Compute in the lake</h3><div class="meta"><span class="chip c-lake">Data lake</span></div></div>
+  <p class="one">DuckDB runs the SQL inside the data lake. This is where every number in the answer is calculated.</p>
+  <ul>
+    <li><b>Counts first:</b> how many rows the user can see, and how many pass the filter.</li>
+    <li><b>Then the totals,</b> all in one pass over the data.</li>
+    <li><b>Then evidence:</b> 8 example rows for people to look at. They are marked as row data and never sent to the LLM.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <table>
+      <tr><td>Loans visible to Admin</td><td class="r">200,000</td></tr>
+      <tr><td>Card loans (eligible rows)</td><td class="r">50,209</td></tr>
+      <tr><td>Σ balance_usd</td><td class="r mono">125,974,233,615</td></tr>
+      <tr><td>Missing balances</td><td class="r">0</td></tr>
+      <tr><td>Time per query</td><td class="r">about 2 ms</td></tr>
+    </table>
+  </div>
+  <p class="saved">Saved: every query with its purpose, time and row count, in <code>proof.json</code>.</p>
+</section>
+
+<section class="step" id="s8">
+  <div class="step-head"><span class="num">8</span><h3>Prove with Z3</h3><div class="meta"><span class="chip c-z3">Z3</span></div></div>
+  <p class="one">Z3 checks that the answer is the only value possible. How it does that depends on the kind of question.</p>
+  <ul>
+    <li><b>A number:</b> Z3 is told “answer = the exact number from the lake”, then asked “could the answer be anything else?”. It replies <i>unsat</i>, meaning impossible. That is the proof.</li>
+    <li><b>A table:</b> each cell is proved the same way.</li>
+    <li><b>Top or bottom:</b> for each rank, a query counts the rows strictly better. The count must match the candidates, so nothing outside the ranking beats it.</li>
+    <li><b>A yes/no claim about rows:</b> a query searches every row for one that breaks the claim. None found means it holds on this snapshot.</li>
+    <li><b>Questions with unknowns</b> (“what is the best value?”, “is this possible?”): Z3 solves for the unknowns. Above 5,000 rows it uses refinement, shown in the box below.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+<pre>(declare-fun ans () Real)                      ; an unknown called ans
+(assert (= ans (to_real 125974233615)))        ; ans equals the lake's total
+(assert (distinct (to_real 125974233615) ans)) ; ...and ans is something else?
+→ unsat: no other value is possible</pre>
+    <p>The same check proves the count, 50,209.</p>
+  </div>
+  <div class="ex"><span class="label">A question with an unknown: the rate cut</span>
+    <p><i>“What is the largest uniform rate cut that keeps every loan's rate at or above its expected loss rate?”</i> That means one rule per loan, 200,000 rules, too many to give Z3 at once. So neo works in rounds:</p>
+    <div class="scroll"><table>
+      <tr><th>Round</th><th class="r">Loans Z3 saw</th><th class="r">Z3's best cut</th><th class="r">Loans in the lake that break it</th><th>Then</th></tr>
+      <tr><td>1</td><td class="r">256</td><td class="r mono">−0.073351</td><td class="r">523</td><td>add 256 of them</td></tr>
+      <tr><td>2</td><td class="r">512</td><td class="r mono">−0.100547</td><td class="r">0</td><td>done</td></tr>
+    </table></div>
+    <p>Two final proofs follow: no larger cut satisfies the rules (unsat), and −0.100547 is actually reachable. Using fewer loans can only make the rules looser, so a best value that also passes every loan in the lake is the true best value.</p>
+  </div>
+</section>
+
+<section class="step" id="s9">
+  <div class="step-head"><span class="num">9</span><h3>Re-check with Lean</h3><div class="meta"><span class="chip c-lean">Lean</span></div></div>
+  <p class="one">Z3 is fast, but its “unsat” has to be trusted. Lean, a proof checker with a small trusted core, re-checks what Z3 decided using exactly the same formulas.</p>
+  <ul>
+    <li><b>neo writes Z3's conclusions as Lean theorems</b> in a new file for this run.</li>
+    <li><b>Facts about numbers</b> are checked by Lean's core recomputing the exact fractions itself (<code>decide +kernel</code>). If Lean disagrees with Z3, the run goes to human review.</li>
+    <li><b>Facts “for every value”</b>, such as “no larger cut is allowed”, are proved by Lean's automatic prover (<code>grind</code>) from only the rows that decide the answer.</li>
+    <li><b>General theorems</b> in <code>lean/Neo</code>, proved once for all runs (21 of them), explain why a result checked on some rows holds for every row.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <p>1 theorem with 2 facts: 125,974,233,615 and 50,209 are exactly what the lake's totals give. <span class="chip ok">checked</span> in 5.2 s. It relies on the library theorems <code>unique_of_unsat</code>, <code>sum_const_den</code> and <code>cmp_sign</code>.</p>
+    <p>For the rate cut, Lean checked 22 theorems with 515 facts. The key one says: for every possible cut, the one deciding loan (0.0163 − cut ≥ 0.11685) forces the cut to be at most −0.100547.</p>
+  </div>
+  <p class="note">If Lean is not installed, or <code>lean.enabled</code> is off, this step is skipped and the certificate does not mention it.</p>
+</section>
+
+<section class="step" id="s10">
+  <div class="step-head"><span class="num">10</span><h3>Recompute another way</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">A second, separate program recomputes the answer from the raw columns, without the SQL compiler. The two results must agree.</p>
+  <ul>
+    <li><b>Up to 300,000 rows:</b> Python reads the raw columns of the same snapshot and evaluates the model with exact fractions.</li>
+    <li><b>Above that:</b> a separate floating-point SQL version is used. It is approximate, and the certificate says so.</li>
+    <li><b>If they disagree,</b> the status becomes <code>mismatch</code>: the answer is marked NOT proved and sent to human review.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span><p>Exact recomputation over 50,209 rows. <span class="chip ok">matched</span></p></div>
+</section>
+
+<!-- ======================= EXPLAIN AND DELIVER ======================= -->
+<div class="phase"><span class="label">Phase 4</span><h2>Explain and deliver</h2><p>The LLM double-checks its own reading of the question, code writes down the facts, and the LLM turns those facts into an answer.</p></div>
+
+<section class="step" id="s11">
+  <div class="step-head"><span class="num">11</span><h3>Review the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+  <p class="one">Claude re-reads its model next to a summary of the result, and either approves it or proposes a fix.</p>
+  <ul>
+    <li><b>What Claude sees:</b> its model and a summary (the answer, row counts, checks). No rows, and no Z3 or Lean files.</li>
+    <li><b>What it asks itself:</b> Is this the exact question? The right columns for each term? Units converted? No double counting? Is the result plausible? A zero, for example, may mean a misspelled category.</li>
+    <li><b>Its reply:</b> “ok”, or “revise” with a corrected model. A revised model goes through steps 5 to 10 again, and replaces the original only if it passes.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span><p>Verdict: ok.</p></div>
+  <p class="saved">Saved: <code>steps/review.json</code>.</p>
+</section>
+
+<section class="step" id="s12">
+  <div class="step-head"><span class="num">12</span><h3>Write the certificate</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">Code writes the proof certificate: the complete record of what was asked, how it was computed and how it was proved.</p>
+  <ul>
+    <li>The question, the interpretation, the form, the status, and how many rows were used out of how many visible.</li>
+    <li>The result and its exact values.</li>
+    <li>The model: table, joins, filters, definitions, and which numbers were stated rather than taken from data.</li>
+    <li>Each rule applied or not applicable, with the reason.</li>
+    <li>Every check and its result, including Z3, Lean and the independent recomputation.</li>
+    <li>Caveats: missing values skipped, row limits applied, approximations.</li>
+    <li>Where it came from: snapshot, ontology version, rules cited, the LLM used, the user and the run id.</li>
+  </ul>
+  <p class="note">Two copies are made: the full one for people, and one for the LLM with row-level evidence removed.</p>
+  <p class="saved">Saved: <code>certificate.md</code>.</p>
+</section>
+
+<section class="step" id="s13">
+  <div class="step-head"><span class="num">13</span><h3>Write the answer</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+  <p class="one">Claude writes the answer for a business reader, using only facts and numbers from the certificate.</p>
+  <ul>
+    <li><b>Answer:</b> one or two sentences, with units and the time window.</li>
+    <li><b>How it was worked out:</b> 2 to 5 lines in plain words.</li>
+    <li><b>Proof:</b> what was proved, and whether the independent check matched. A mismatch must be stated as “not proved, under review”.</li>
+    <li><b>Scenarios</b> (when used): history shares as counts and percentages, with the window named.</li>
+    <li><b>Caveats:</b> missing values, row limits, assumptions.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <p>No API key was set when this run was made, so this step used a placeholder text. Every number above was still computed and proved. With Claude connected, this step writes the answer from the certificate.</p>
+  </div>
+  <p class="saved">Saved: <code>answer.md</code>.</p>
+</section>
+
+<section class="step" id="s14">
+  <div class="step-head"><span class="num">14</span><h3>Route for review</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">Code decides whether a person must look at the answer before it is trusted.</p>
+  <p>A run goes to the review queue when any of these is true:</p>
+  <ul>
+    <li>The status is not a proof (failed, mismatch, not unique, and so on).</li>
+    <li>The independent check disagreed, or was only approximate.</li>
+    <li>Some totals were computed in floating point.</li>
+    <li>Lean rejected a fact that Z3 reported.</li>
+    <li>A backtest contradicts real past events.</li>
+    <li>The table belongs to a high-impact area (regulatory, board).</li>
+    <li>4 or more enforced rules shaped the model.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span><p>No reasons, so the answer was delivered straight away. Admin is the only user who can approve reviews.</p></div>
+</section>
+
+<section class="step" id="s15">
+  <div class="step-head"><span class="num">15</span><h3>Save and audit</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+  <p class="one">Everything is written to disk, so the run can be inspected, replayed and audited later.</p>
+  <div class="scroll"><table>
+    <tr><th>File in <code>var/runs/&lt;run id&gt;/</code></th><th>What it holds</th></tr>
+    <tr><td class="mono">model.json</td><td>The final model</td></tr>
+    <tr><td class="mono">proof.json</td><td>All SQL with timings, what Z3 was given, solving rounds, the Lean file and its results</td></tr>
+    <tr><td class="mono">certificate.md</td><td>The proof certificate</td></tr>
+    <tr><td class="mono">answer.md</td><td>The answer with the certificate</td></tr>
+    <tr><td class="mono">trace.json</td><td>How long each step took</td></tr>
+    <tr><td class="mono">steps/, attempts/</td><td>Each step's output and every model the LLM tried</td></tr>
+  </table></div>
+  <ul>
+    <li><b>Audit log:</b> “answer delivered”, with user, status, snapshot and tables used.</li>
+    <li><b>Replay:</b> re-runs the saved model on the same snapshot and ontology and confirms the same answer.</li>
+    <li><b>Replay on today's data:</b> the same model on the latest data and ontology.</li>
+    <li><b>Feedback:</b> a thumbs up or down with a comment, stored with the run.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span><p>Total time 6.2 s, about 5 s of it Lean starting up. Open it in the UI's Ask tab: <code>run_20261103112042_e63a705a</code>.</p></div>
+</section>
+
+<!-- ======================= REFERENCE ======================= -->
+<section class="step" id="endings">
+  <div class="phase"><span class="label">Reference</span><h2>How a run can end</h2></div>
+  <div class="scroll"><table>
+    <tr><th>Status</th><th>What it means</th></tr>
+    <tr><td><span class="chip ok">proved</span></td><td>A number, table, ranking or list, proved and independently matched</td></tr>
+    <tr><td><span class="chip ok">optimal</span></td><td>The best value was found, nothing better is allowed, and it is reachable</td></tr>
+    <tr><td><span class="chip ok">feasible</span> <span class="chip ok">infeasible</span></td><td>It is possible (with an example), or impossible (with the rules that clash)</td></tr>
+    <tr><td><span class="chip ok">refuted</span></td><td>A claim was checked and is false, with counterexamples</td></tr>
+    <tr><td><span class="chip ok">unbounded</span></td><td>There is no best value: it can grow without limit</td></tr>
+    <tr><td><span class="chip c-code">undefined</span></td><td>No eligible row had a value</td></tr>
+    <tr><td><span class="chip c-code">not_expressible</span></td><td>The data cannot answer this, and the LLM says so</td></tr>
+    <tr><td><span class="chip c-llm">needs_clarification</span></td><td>The question could not be linked to any table (step 2)</td></tr>
+    <tr><td><span class="chip c-llm">needs_approval</span></td><td>The query is too large for the user (step 5)</td></tr>
+    <tr><td><span class="chip bad">mismatch</span></td><td>The independent recomputation disagreed: not proved, sent for review</td></tr>
+    <tr><td><span class="chip bad">no_model</span></td><td>No valid model after 4 attempts, so no answer is given</td></tr>
+    <tr><td><span class="chip bad">llm_error</span></td><td>The language model could not be reached or failed</td></tr>
+  </table></div>
+</section>
+
+<section class="step glossary" id="glossary">
+  <div class="phase"><span class="label">Reference</span><h2>Words used here</h2></div>
+  <dl>
+    <dt>Ontology</dt><dd>The company's dictionary of its data: what each table and column means, in which unit, and which rules apply.</dd>
+    <dt>Term</dt><dd>A business word with a definition, such as exposure or PD. Columns are linked to terms.</dd>
+    <dt>Entity</dt><dd>A kind of thing with its own table: a loan, a customer, a deal.</dd>
+    <dt>Constraint</dt><dd>A business rule in the ontology. “Block” rules must be addressed by the model; “info” rules are background.</dd>
+    <dt>Snapshot</dt><dd>A frozen version of every table, so a run always reads the same data.</dd>
+    <dt>Briefing</dt><dd>The short extract of the ontology the LLM reads for one question. It has no data rows.</dd>
+    <dt>Model</dt><dd>The LLM's precise version of the question: which rows, which formula, which kind of answer.</dd>
+    <dt>Form</dt><dd>The kind of answer: value, table, extremum, set, check, feasibility, optimisation, or not expressible.</dd>
+    <dt>Grounding</dt><dd>The part of the model that cites the terms used and says how each enforced rule was handled.</dd>
+    <dt>Row limit (row policy)</dt><dd>A filter added by code for users who may see only some rows. Admin has none.</dd>
+    <dt>Exact fraction</dt><dd>A number kept as a whole-number top and bottom, so nothing is ever rounded.</dd>
+    <dt>Z3</dt><dd>A solver. “Unsat” means no value can satisfy what it was asked, which is how a proof is phrased.</dd>
+    <dt>Refinement</dt><dd>Solving on a small set of rows, checking the result against every row in the lake, adding the rows that break it, and repeating.</dd>
+    <dt>Lean</dt><dd>A proof checker. Its small core re-checks Z3's conclusions; a library of general theorems covers the step from some rows to every row.</dd>
+    <dt>Certificate</dt><dd>The code-written record of the question, model, result, checks and sources. The final answer may use only these facts.</dd>
+  </dl>
+</section>
+</main>
+</div>
+
+<footer>Numbers on this page come from run <code>run_20261103112042_e63a705a</code> (cards) and the rate-cut run on the same 200,000-loan snapshot, both on ontology version v0001-117ad810.</footer>
+</div>
+
+<script>
+(() => {
+  const links = [...document.querySelectorAll("nav.toc a")];
+  const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+  if (!("IntersectionObserver" in window)) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      links.forEach((a) => a.classList.remove("on"));
+      const a = byId.get(e.target.id);
+      if (a) a.classList.add("on");
+    }
+  }, { rootMargin: "-20% 0px -70% 0px" });
+  byId.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
+})();
+</script>
+</body>
+</html>

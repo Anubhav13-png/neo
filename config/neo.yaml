@@ -1,0 +1,71 @@
+# neo platform configuration. Paths are relative to the project root (the folder holding config/).
+
+lake:
+  kind: local                 # local: DuckDB over versioned Parquet in `root` (Iceberg-style snapshots)
+  root: data/lake
+  # Production: any engine with a SQLAlchemy dialect, with time travel for snapshot pinning.
+  # kind: sqlalchemy
+  # sqlalchemy:
+  #   url: trino://user@trino.internal:443/iceberg/analytics
+  #   dialect: trino           # duckdb | trino | snowflake
+  #   table_ref: "{table} FOR VERSION AS OF {version}"
+
+ontology:
+  store: json_dir             # implement neo.ontology.store.OntologyStore for your own ontology storage
+  root: ontology
+
+rules_dir: rules
+
+retrieval:
+  max_linked: 25              # ontology objects linked per question
+  hops: 1                     # also brief the LLM on entities one join away
+  max_fields_per_entity: 120
+
+llm:
+  default:
+    provider: anthropic       # anthropic | openai_compatible | ollama | vllm | gemini | scripted | "module:Class"
+    model: claude-opus-5-5
+    max_tokens: 16000
+  tasks:                      # route each step to a model; omitted tasks use `default`
+    formalize: default
+    review: default
+    answer: {provider: anthropic, model: claude-sonnet-5-5, max_tokens: 4000}
+  daily_token_budget: 2000000 # per user, unless the user's role sets one
+
+pipeline:
+  max_repairs: 3              # times the LLM may fix a model the validator or prover rejected
+  review: true                # LLM re-reads its model and the result, may correct it once
+  solver_timeout_seconds: 60
+
+verification:
+  exact_max_rows: 300000      # the independent exact interpreter handles universes up to this size
+  second_engine: duckdb_float # above it: an independent float SQL compilation (approximate check)
+  double_scale: 10            # DOUBLE columns are read exactly at 10 decimal places by both paths
+
+proof:
+  symbolic_max_rows: 5000     # every-row constraints with variables: solve directly up to this many rows
+  cegar_seed_rows: 256        # above it: counterexample-guided refinement, starting from this many rows
+  cegar_batch: 256            # violating rows added per round
+  cegar_max_iterations: 40
+  unbounded_probe: 1.0e15
+  extremum_candidates: 64
+
+governance:
+  users: config/users.yaml
+  audit_log: var/audit.jsonl
+  allow_row_samples_to_llm: false     # certificates sent to the LLM drop row-level evidence
+  max_rows_without_approval: 50000000 # bigger scans need a role with large_queries
+  unit_errors: error                   # error | warning
+  review:
+    high_impact_domains: [regulatory, board]
+    min_block_constraints: 4
+
+runs:
+  root: var/runs
+
+lean:
+  enabled: auto               # auto: check Z3's results with Lean when it is installed | off | required
+  project: lean               # the theorem library (lean/Neo); build it with `neo lean build`
+  timeout_seconds: 120
+  max_row_facts: 2000         # per-row facts Lean's kernel checks per run (the lake checks every row)
+  max_core: 60                # largest set of row formulas handed to Lean's `grind` for a bound or a clash

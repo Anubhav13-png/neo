@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>neo · question explorer</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --panel2: #f9fafb; --ink: #15181e; --muted: #5d6573; --faint: #8a919d;
+  --line: #e2e5ea; --accent: #2f5bea; --accent-bg: #edf1fe;
+  --llm: #a8620b; --llm-bg: #fff5e3; --llm-line: #f0cf95;
+  --ok: #18804a; --ok-bg: #e7f6ee; --bad: #c2312f; --bad-bg: #fdecec; --warn: #a8620b; --warn-bg: #fff5e3;
+  --f: #2f5bea; --d: #0f7c70; --p: #7a3fe0; --v: #b0540a; --s: #a33a63;
+  --code-bg: #f3f4f7;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --serif: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216; --panel: #171b21; --panel2: #1c2128; --ink: #e8eaee; --muted: #a1a8b4; --faint: #737b88;
+    --line: #2a3039; --accent: #7d9bff; --accent-bg: #1c2540;
+    --llm: #f0b45a; --llm-bg: #2b2112; --llm-line: #5c4420;
+    --ok: #4cc584; --ok-bg: #12291d; --bad: #ff7b78; --bad-bg: #331617; --warn: #f0b45a; --warn-bg: #2b2112;
+    --f: #87a5ff; --d: #4fd1c0; --p: #b794ff; --v: #f4a55a; --s: #f08cb3; --code-bg: #12161b;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: var(--mono); font-size: 12.5px; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* top bar */
+header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 20px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.brand small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.tabs { display: flex; gap: 4px; margin-left: 12px; }
+.tabs button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.tabs button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.spacer { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--panel2); white-space: nowrap; }
+.chip.ok { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.chip.bad { color: var(--bad); background: var(--bad-bg); border-color: transparent; }
+.chip.warn, .chip.llm { color: var(--llm); background: var(--llm-bg); border-color: var(--llm-line); }
+.chip.acc { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+select.user { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.user-one { padding: 5px 0; color: var(--muted); white-space: nowrap; }
+
+/* layout */
+.layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 960px) { .layout { grid-template-columns: 1fr; padding: 12px; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.side { display: flex; flex-direction: column; gap: 16px; align-self: start; position: sticky; top: 72px;
+  max-height: calc(100vh - 92px); overflow: auto; }
+@media (max-width: 960px) { .side { position: static; max-height: none; } }
+.box { padding: 14px; }
+.box h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+textarea.q { width: 100%; min-height: 72px; resize: vertical; padding: 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--panel2); }
+textarea.json { width: 100%; min-height: 220px; resize: vertical; padding: 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--code-bg); font-family: var(--mono); font-size: 12px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 10px 0; }
+.seg button { flex: 1; border: 0; padding: 7px 8px; background: var(--panel2); cursor: pointer; color: var(--muted); font-size: 13px; }
+.seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.btn { border: 0; background: var(--accent); color: #fff; padding: 9px 14px; border-radius: 8px; cursor: pointer;
+  font-weight: 600; width: 100%; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+.hint.warn { color: var(--warn); }
+.examples button { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel2);
+  padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
+.examples button:hover, .runs button:hover { border-color: var(--accent); }
+.examples .meta, .runs .meta { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.runs button { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none;
+  padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.runs button.on { background: var(--accent-bg); border-color: transparent; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--faint); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+.dot.run { background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* run view */
+.main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.empty { padding: 60px 30px; text-align: center; color: var(--muted); }
+.empty h2 { color: var(--ink); margin: 0 0 8px; font-size: 20px; }
+.head { padding: 18px 20px; }
+.head .q { font-size: 19px; font-weight: 600; margin: 0 0 8px; }
+.head .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.head .result { margin-top: 14px; padding: 12px 14px; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); }
+.big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* stepper */
+.stepper { display: flex; gap: 0; overflow-x: auto; padding: 14px 16px; }
+.st { flex: 1 0 auto; min-width: 74px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
+  position: relative; border: 0; background: none; padding: 0 2px; }
+.st::before { content: ""; position: absolute; top: 11px; left: -50%; width: 100%; height: 2px; background: var(--line); z-index: 0; }
+.st:first-child::before { display: none; }
+.st.done::before { background: var(--ok); }
+.st .n { position: relative; z-index: 1; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; background: var(--panel2); border: 2px solid var(--line); color: var(--muted); }
+.st.done .n { background: var(--ok); border-color: var(--ok); color: #fff; }
+.st.llm .n { border-color: var(--llm); }
+.st.llm.done .n { background: var(--llm); border-color: var(--llm); }
+.st.cur .n { border-color: var(--accent); animation: pulse 1s infinite; }
+.st.fail .n { background: var(--bad); border-color: var(--bad); color: #fff; }
+.st .l { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.st.done .l { color: var(--ink); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 16px 12px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.legend .a::before { background: var(--ok); } .legend .b::before { background: var(--llm); }
+
+/* sections */
+.sec { scroll-margin-top: 80px; }
+.sec > .top { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.sec > .top > .num { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 700;
+  font-size: 13px; background: var(--accent-bg); color: var(--accent); }
+.sec.llm > .top > .num { background: var(--llm-bg); color: var(--llm); }
+.sec .top h2 { margin: 0; font-size: 16px; }
+.sec .top p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.sec .top .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.sec .body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.sec.pending .body { color: var(--faint); }
+.sub { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin: 0 0 6px; }
+.callout { padding: 10px 12px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line); font-size: 13px; }
+.callout.llm { background: var(--llm-bg); border-color: var(--llm-line); }
+.callout.bad { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
+.callout.ok { background: var(--ok-bg); border-color: transparent; }
+.codebox { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; max-height: 420px; overflow: auto; }
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+details > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: 13px; }
+details > div { padding: 0 12px 12px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.t td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; }
+.bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: .7; }
+
+/* json + sql */
+.j-k { color: var(--f); } .j-s { color: var(--d); } .j-n { color: var(--p); } .j-b { color: var(--v); }
+.sql-k { color: var(--p); font-weight: 600; }
+
+/* math */
+.math { display: grid; grid-template-columns: 130px 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.math > div { padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.math > div:nth-last-child(-n+2) { border-bottom: 0; }
+.math .lab { background: var(--panel2); color: var(--muted); font-size: 12px; font-weight: 600; }
+.math .eq { font-family: var(--serif); font-size: 17px; line-height: 1.6; }
+.math .eq .note { display: block; font-family: var(--sans); font-size: 12px; color: var(--faint); }
+.math i { font-style: italic; }
+.math sub { font-size: 12px; }
+.math .op { font-size: 20px; }
+.math .muted, .muted { color: var(--faint); }
+.f, .d, .p, .v { font-family: var(--mono); font-size: 13.5px; font-style: normal; cursor: help; border-bottom: 1px dotted currentColor; }
+.f { color: var(--f); } .d { color: var(--d); } .p { color: var(--p); } .v { color: var(--v); font-weight: 600; }
+.s { color: var(--s); font-family: var(--mono); font-size: 13.5px; }
+.keys { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+@media (max-width: 640px) { .math { grid-template-columns: 1fr; } .math .lab { border-bottom: 0 !important; padding-bottom: 0; } }
+
+/* statement anatomy */
+.anat { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.anat-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+.anat-b { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.math1 { font-family: var(--serif); font-size: 19px; line-height: 1.6; }
+.math1 sub { font-size: 12px; } .math1 .op { font-size: 21px; }
+.ops { display: flex; flex-wrap: wrap; gap: 6px; }
+.op-chip { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--panel2); }
+.op-chip b { font-family: var(--serif); font-size: 14px; margin-right: 4px; }
+ol.story { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13.5px; }
+
+/* columns */
+.col { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel2); }
+.col .nm { font-family: var(--mono); font-weight: 700; color: var(--f); font-size: 14px; }
+.col .phys { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 2px; }
+.col .desc { margin: 8px 0; }
+.col .term { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; margin: 6px 0; }
+.col .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+/* checks */
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checks li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 13.5px; }
+.checks .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--ok-bg); color: var(--ok); }
+.checks .ic.w { background: var(--warn-bg); color: var(--warn); }
+.checks .ic.x { background: var(--bad-bg); color: var(--bad); }
+.checks .m { color: var(--muted); font-size: 12.5px; }
+
+/* attempts */
+.att { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.att .ah { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel2); border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+.att .ab { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* markdown */
+.md h2 { font-size: 16px; margin: 10px 0 6px; } .md h3 { font-size: 14px; margin: 12px 0 6px; } .md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 6px 0; }
+.md table { border-collapse: collapse; font-size: 12.5px; margin: 6px 0; }
+.md td, .md th { border: 1px solid var(--line); padding: 4px 8px; }
+.md code { background: var(--code-bg); padding: 0 3px; border-radius: 3px; }
+.md pre code { background: none; padding: 0; }
+.subtabs { display: flex; gap: 6px; }
+.subtabs button { border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+.subtabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* ontology layer explainer */
+.learn { max-width: 1120px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 960px) { .learn { padding: 12px; } }
+.learn .lead { font-size: 15px; max-width: 80ch; margin: 6px 0 0; }
+.counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 14px; }
+@media (max-width: 760px) { .counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.counts > div { background: var(--panel); padding: 12px 14px; }
+.counts b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.counts span { font-size: 12.5px; color: var(--muted); }
+.blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.blocks .col h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.blocks .col p { margin: 6px 0; font-size: 13px; }
+.blocks .ex { font-size: 12.5px; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 6px; }
+.blocks .ex code { font-size: 12px; }
+.hbars { display: grid; grid-template-columns: max-content minmax(60px, 1fr) max-content; gap: 6px 10px; align-items: center; font-size: 13px; }
+.hbars .track { height: 10px; background: var(--panel2); border-radius: 5px; overflow: hidden; }
+.hbars .fill { height: 100%; background: var(--accent); }
+.hbars .n { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+.pipe { overflow-x: auto; }
+.pipe svg { display: block; width: 100%; min-width: 820px; height: auto; color: var(--ink); }
+.pipe .bx { fill: var(--panel2); stroke: var(--line); stroke-width: 1.4; }
+.pipe .bx-o { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.6; }
+.pipe .bx-l { fill: var(--llm-bg); stroke: var(--llm); stroke-width: 1.6; }
+.pipe .tt { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.pipe .st2 { fill: var(--muted); font-size: 11px; }
+.pipe .ar { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.pipe .ah { fill: var(--muted); }
+.trace-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.trace-form input { flex: 1 1 280px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+.trace-form button { width: auto; }
+.health li { grid-template-columns: 22px 1fr; }
+
+/* ontology */
+.ont { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 960px) { .ont { grid-template-columns: 1fr; padding: 12px; } }
+.ent-list button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.ent-list button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+input.search { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">neo<small>question explorer</small></div>
+  <nav class="tabs"><button data-tab="learn" class="on">Ontology layer</button><button data-tab="ask">Ask</button><button data-tab="ont">Data dictionary</button></nav>
+  <div class="spacer"></div>
+  <span class="chip" id="ver"></span>
+  <span class="chip" id="llm"></span>
+  <label class="hint" for="user" style="margin:0">Asking as</label>
+  <select id="user" class="user"></select>
+</header>
+
+<div id="tab-learn" class="learn"></div>
+
+<div id="tab-ask" class="layout hidden">
+  <aside class="side">
+    <div class="panel box">
+      <h3>Ask a question</h3>
+      <textarea id="q" class="q" placeholder="e.g. What is our total exposure on cards?"></textarea>
+      <div class="seg" role="tablist">
+        <button id="m-live" class="on">Live LLM</button>
+        <button id="m-sup">Supplied model (no LLM)</button>
+      </div>
+      <div id="live-hint" class="hint"></div>
+      <div id="sup-box" class="hidden">
+        <div class="hint">The model below is used instead of the LLM's. Everything after the LLM still runs for real: validation, exact SQL, Z3, the independent check. Pick an example to load its model, or edit it.</div>
+        <textarea id="model" class="json" spellcheck="false"></textarea>
+        <div id="model-err" class="hint warn"></div>
+      </div>
+      <button id="ask" class="btn">Ask</button>
+    </div>
+    <div class="panel box examples">
+      <h3>Example questions</h3>
+      <div id="examples"></div>
+    </div>
+    <div class="panel box runs">
+      <h3>Recent runs</h3>
+      <div id="runs"></div>
+    </div>
+  </aside>
+  <main class="main" id="view">
+    <div class="panel empty">
+      <h2>Ask a question to see every step</h2>
+      <p>Pick an example on the left, or type your own. You will see how the question is linked to the ontology, the model the LLM writes, the same model as mathematics, every column it uses and what that column means, the exact SQL, the Z3 proof, the independent recomputation, the certificate and the answer.</p>
+    </div>
+  </main>
+</div>
+
+<div id="tab-ont" class="ont hidden">
+  <aside class="panel box side">
+    <h3>Entities</h3>
+    <div class="ent-list" id="ents"></div>
+  </aside>
+  <main class="main" id="ent-view"></main>
+</div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+const state = { cfg: null, user: null, mode: "live", runId: null, timer: null, data: null, certTab: "full", ont: null, ent: null, learn: null };
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-User": state.user || "", ...(opts.headers || {}) } });
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(typeof m === "string" ? m : JSON.stringify(m)); }
+  return r.json();
+}
+
+/* ---------------- formatting helpers ---------------- */
+function fmtNum(v) {
+  if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString("en-US") : (Math.abs(v) >= 1000 ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(+v.toPrecision(10)));
+  return esc(v);
+}
+function jsonHtml(obj) {
+  const s = esc(JSON.stringify(obj, null, 2));
+  return s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/gi, (m, str, colon, kw, num) => {
+    if (str) return colon ? `<span class="j-k">${str}</span>${colon}` : `<span class="j-s">${str}</span>`;
+    if (kw) return `<span class="j-b">${kw}</span>`;
+    return `<span class="j-n">${num}</span>`;
+  });
+}
+const SQLK = /\b(SELECT|FROM|WHERE|AND|OR|NOT|AS|CAST|SUM|COUNT|FILTER|GROUP BY|ORDER BY|LIMIT|JOIN|LEFT|ON|CASE|WHEN|THEN|ELSE|END|COALESCE|HUGEINT|DECIMAL|BIGINT|IS|NULL|TRUE|FALSE|DESC|ASC|MIN|MAX|WITH|IN|DISTINCT|OVER|PARTITION BY)\b/g;
+const sqlHtml = (s) => esc(s).replace(SQLK, '<span class="sql-k">$1</span>');
+
+function md(text) {
+  const lines = String(text || "").split("\n");
+  let out = "", i = 0;
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*```/.test(l)) {
+      const buf = []; i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+      i++; out += `<pre><code>${esc(buf.join("\n").replace(/^ {2}/gm, ""))}</code></pre>`; continue;
+    }
+    if (/^\|/.test(l)) {
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = (r) => r.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const body = rows.filter((r, k) => k !== 1 || !/^\|[\s\-:|]+\|$/.test(r));
+      out += `<div class="scroll"><table>${body.map((r, k) => `<tr>${cells(r).map((c) => k ? `<td>${inline(c)}</td>` : `<th>${inline(c)}</th>`).join("")}</tr>`).join("")}</table></div>`;
+      continue;
+    }
+    let m;
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { const h = Math.min(m[1].length + 1, 4); out += `<h${h}>${inline(m[2])}</h${h}>`; i++; continue; }
+    if (/^\s*[-*]\s+/.test(l) || /^\s*\d+\.\s+/.test(l)) {
+      const ordered = /^\s*\d+\./.test(l); const items = [];
+      while (i < lines.length && (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+\.\s+/.test(lines[i]))) items.push(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+      out += `<${ordered ? "ol" : "ul"}>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`; continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^(#|\||\s*```|\s*[-*]\s|\s*\d+\.\s)/.test(lines[i])) para.push(lines[i++]);
+    if (!para.length) { para.push(lines[i++]); }
+    out += `<p>${inline(para.join(" "))}</p>`;
+  }
+  return `<div class="md">${out}</div>`;
+}
+
+function valueHtml(v) {
+  if (v === null || v === undefined) return '<span class="muted">none</span>';
+  if (Array.isArray(v)) {
+    if (!v.length) return '<span class="muted">empty</span>';
+    if (typeof v[0] === "object" && v[0] !== null) {
+      const keys = [...new Set(v.flatMap((r) => Object.keys(r)))];
+      return `<div class="scroll"><table class="t"><tr>${keys.map((k) => `<th>${esc(k)}</th>`).join("")}</tr>${v.map((r) => `<tr>${keys.map((k) => `<td class="${typeof r[k] === "number" ? "num" : ""}">${typeof r[k] === "object" && r[k] !== null ? esc(JSON.stringify(r[k])) : fmtNum(r[k])}</td>`).join("")}</tr>`).join("")}</table></div>`;
+    }
+    return v.map(fmtNum).join(", ");
+  }
+  if (typeof v === "object") {
+    return `<dl class="kv">${Object.entries(v).map(([k, x]) => `<dt>${esc(k)}</dt><dd class="big" style="font-size:18px">${typeof x === "object" && x !== null ? esc(JSON.stringify(x)) : fmtNum(x)}</dd>`).join("")}</dl>`;
+  }
+  return `<span class="big">${fmtNum(v)}</span>`;
+}
+
+const STATUS = { proved: "ok", optimal: "ok", holds: "ok", feasible: "ok", sat: "ok", infeasible: "warn", fails: "warn", unbounded: "warn",
+  not_expressible: "warn", needs_clarification: "warn", needs_approval: "warn", running: "run", mismatch: "bad", no_model: "bad", llm_error: "bad", error: "bad" };
+const statusChip = (s) => `<span class="chip ${STATUS[s] === "run" ? "acc" : STATUS[s] || ""}">${esc(s || "…")}</span>`;
+
+/* ---------------- setup ---------------- */
+async function init() {
+  state.cfg = await api("/ui/config");
+  const sel = $("#user");
+  sel.innerHTML = state.cfg.users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.clearance)}</option>`).join("");
+  state.user = store.get("neo.user") && state.cfg.users.some((u) => u.id === store.get("neo.user")) ? store.get("neo.user") : state.cfg.users[0].id;
+  sel.value = state.user;
+  if (state.cfg.users.length === 1) {       // one user: show who, no picker
+    const u = state.cfg.users[0];
+    sel.classList.add("hidden");
+    sel.insertAdjacentHTML("afterend", `<span class="user-one">${esc(u.name)} · ${esc(u.clearance)}</span>`);
+  }
+  sel.onchange = () => { state.user = sel.value; store.set("neo.user", state.user); loadRuns(); state.ont = null; state.learn = null; if (!$("#tab-ont").classList.contains("hidden")) loadOntology(); if (!$("#tab-learn").classList.contains("hidden")) loadLearn(); };
+  $("#ver").textContent = `ontology ${state.cfg.ontology_version} · ${state.cfg.snapshot}`;
+  const llm = $("#llm");
+  llm.textContent = state.cfg.llm_available ? `LLM: ${state.cfg.llm}` : "LLM: not configured";
+  llm.className = "chip " + (state.cfg.llm_available ? "ok" : "warn");
+  llm.title = state.cfg.llm;
+  $("#examples").innerHTML = state.cfg.examples.map((e, i) => `<button data-i="${i}">${esc(e.question)}<div class="meta">${esc(e.form || "")} · asked as ${esc(e.user)}</div></button>`).join("");
+  $("#examples").onclick = (ev) => { const b = ev.target.closest("button"); if (b) pickExample(state.cfg.examples[+b.dataset.i]); };
+  $("#m-live").onclick = () => setMode("live");
+  $("#m-sup").onclick = () => setMode("sup");
+  $("#ask").onclick = ask;
+  $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(); });
+  document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
+  setMode(state.cfg.llm_available ? "live" : "sup");
+  loadRuns();
+  const hash = location.hash.slice(1);
+  if (hash.startsWith("run_")) openRun(hash);
+  else if (hash === "ont" || hash === "ask") showTab(hash);
+  else showTab("learn");
+}
+
+function showTab(t) {
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  for (const k of ["learn", "ask", "ont"]) $("#tab-" + k).classList.toggle("hidden", t !== k);
+  if (t === "ont") { loadOntology(); location.hash = "ont"; }
+  else if (t === "learn") { loadLearn(); location.hash = "learn"; }
+  else location.hash = state.runId || "ask";
+}
+
+function setMode(m) {
+  state.mode = m;
+  $("#m-live").classList.toggle("on", m === "live");
+  $("#m-sup").classList.toggle("on", m === "sup");
+  $("#sup-box").classList.toggle("hidden", m !== "sup");
+  const h = $("#live-hint");
+  if (m === "live") {
+    h.className = "hint" + (state.cfg.llm_available ? "" : " warn");
+    h.innerHTML = state.cfg.llm_available
+      ? `The LLM (${esc(state.cfg.llm)}) writes the model. It never sees row data.`
+      : "No LLM is configured, so live questions will fail. Set <code>ANTHROPIC_API_KEY</code> (or another provider in config/neo.yaml) and restart <code>neo serve</code>, or use a supplied model.";
+  } else h.textContent = "";
+  if (m === "sup" && !$("#model").value.trim() && state.cfg.examples[0]) pickExample(state.cfg.examples[0]);
+}
+
+function pickExample(e) {
+  $("#q").value = e.question;
+  if (e.model) $("#model").value = JSON.stringify(e.model, null, 2);
+  if (e.user && e.user !== state.user && state.cfg.users.some((u) => u.id === e.user)) {
+    state.user = e.user; $("#user").value = e.user; store.set("neo.user", e.user); loadRuns();
+  }
+}
+
+async function loadRuns() {
+  try {
+    const runs = await api("/runs?limit=40");
+    $("#runs").innerHTML = runs.length ? runs.map((r) => `<button data-id="${esc(r.id)}" class="${r.id === state.runId ? "on" : ""}"><span class="dot ${STATUS[r.status] || ""}"></span>${esc(r.question)}<div class="meta">${esc(r.status)} · ${esc(r.user)} · ${esc((r.created || "").replace("T", " ").slice(0, 16))}${r.seconds != null ? ` · ${r.seconds}s` : ""}</div></button>`).join("")
+      : '<div class="hint">No runs yet for this user.</div>';
+    $("#runs").onclick = (ev) => { const b = ev.target.closest("button"); if (b) openRun(b.dataset.id); };
+  } catch (e) { $("#runs").innerHTML = `<div class="hint warn">${esc(e.message)}</div>`; }
+}
+
+async function ask() {
+  const question = $("#q").value.trim();
+  if (!question) { $("#q").focus(); return; }
+  const body = { question };
+  $("#model-err").textContent = "";
+  if (state.mode === "sup") {
+    try { body.model = JSON.parse($("#model").value); } catch (e) { $("#model-err").textContent = "The model is not valid JSON: " + e.message; return; }
+  }
+  $("#ask").disabled = true;
+  try {
+    const r = await api("/ui/ask", { method: "POST", body: JSON.stringify(body) });
+    openRun(r.run_id);
+    loadRuns();
+  } catch (e) { alert(e.message); }
+  finally { $("#ask").disabled = false; }
+}
+
+async function openRun(id) {
+  clearTimeout(state.timer);
+  state.runId = id;
+  if ($("#tab-ask").classList.contains("hidden")) showTab("ask");
+  location.hash = id;
+  document.querySelectorAll("#runs button").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
+  await poll(true);
+}
+
+async function poll(first) {
+  const id = state.runId;
+  let d;
+  try { d = await api(`/ui/runs/${id}/explain`); }
+  catch (e) { $("#view").innerHTML = `<div class="panel empty"><h2>Cannot open this run</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (id !== state.runId) return;
+  const scroll = window.scrollY;
+  state.data = d;
+  render(d);
+  if (!first) window.scrollTo(0, scroll);
+  if (!d.finished) state.timer = setTimeout(() => poll(false), 700);
+  else if (!first) loadRuns();
+}
+
+/* ---------------- run view ---------------- */
+const DERIVED = new Set(["math", "columns", "validate", "execute", "prove", "check"]);
+function stepDone(d, s) {
+  const has = (k) => d.steps.find((x) => x.key === k)?.done;
+  if (s.key === "pin") return true;
+  if (s.key === "ontology") return has("retrieve") && !!d.ontology_use;
+  if (DERIVED.has(s.key)) return has("formalize") && !d.formalize?.failed && !!d.proof;
+  return s.done;
+}
+
+function render(d) {
+  const run = d.run, p = d.proof || {};
+  const firstOpen = d.steps.find((s) => !stepDone(d, s));
+  const failed = d.finished && ["no_model", "llm_error", "error", "needs_clarification", "needs_approval"].includes(run.status);
+  const stepper = d.steps.map((s, i) => {
+    const done = stepDone(d, s);
+    const cls = ["st", s.llm ? "llm" : "", done ? "done" : "", !done && !d.finished && s === firstOpen ? "cur" : "", !done && failed && s === firstOpen ? "fail" : ""].join(" ");
+    return `<button class="${cls}" data-go="${s.key}" title="${esc(s.about)}"><span class="n">${i + 1}</span><span class="l">${esc(s.label)}</span></button>`;
+  }).join("");
+  const u = run.principal;
+  const resultBox = p.answer !== undefined
+    ? `<div class="result"><div class="sub">Proved result</div>${valueHtml(p.answer)}${p.answer_summary && typeof p.answer !== "object" ? "" : ""}</div>`
+    : (d.finished && d.answer ? `<div class="result">${md(d.answer)}</div>` : "");
+  let html = `
+  <div class="panel head">
+    <p class="q">${esc(run.question)}</p>
+    <div class="chips">
+      ${statusChip(d.finished ? run.status : "running")}
+      ${run.form ? `<span class="chip acc">form: ${esc(run.form)}</span>` : ""}
+      <span class="chip">${esc(u.name)} · ${esc(u.roles.join(", "))} · clearance ${esc(u.clearance)}</span>
+      ${Object.keys(u.row_policies || {}).length ? `<span class="chip warn" title="${esc(JSON.stringify(u.row_policies))}">row policy applies</span>` : ""}
+      ${run.seconds != null ? `<span class="chip">${run.seconds}s</span>` : ""}
+      ${run.needs_review ? '<span class="chip warn">sent to human review</span>' : ""}
+      <span class="chip mono">${esc(run.id)}</span>
+    </div>
+    ${resultBox}
+  </div>
+  <div class="panel">
+    <div class="stepper" id="stepper">${stepper}</div>
+    <div class="legend"><span class="a">code (deterministic)</span><span class="b">language model</span><span>Steps 5 to 10 run inside Formalize for every attempt; they are split out here so you can read them.</span></div>
+  </div>`;
+  d.steps.forEach((s, i) => { html += section(d, s, i + 1); });
+  $("#view").innerHTML = html;
+  $("#stepper").onclick = (ev) => { const b = ev.target.closest("[data-go]"); if (b) document.getElementById("sec-" + b.dataset.go)?.scrollIntoView({ behavior: "smooth" }); };
+  document.querySelectorAll("[data-cert]").forEach((b) => b.onclick = () => { state.certTab = b.dataset.cert; render(state.data); });
+}
+
+function section(d, s, n) {
+  const done = stepDone(d, s);
+  const body = done ? (BODY[s.key] ? BODY[s.key](d) : "") : (d.finished ? '<div class="hint">This step did not run for this question (see the status above).</div>' : '<div class="hint">Waiting…</div>');
+  const ms = s.ms != null ? `<span class="chip">${s.ms < 1000 ? s.ms + " ms" : (s.ms / 1000).toFixed(2) + " s"}</span>` : "";
+  return `<section class="panel sec ${s.llm ? "llm" : ""} ${done ? "" : "pending"}" id="sec-${s.key}">
+    <div class="top"><div class="num">${n}</div><div><h2>${esc(s.label)}</h2><p>${esc(s.about)}</p></div>
+      <div class="right">${s.llm ? '<span class="chip llm">LLM</span>' : '<span class="chip">code</span>'}${ms}</div></div>
+    <div class="body">${body}</div></section>`;
+}
+
+function leanHtml(L) {
+  if (!L) return "";
+  if (L.status === "not_checked") return `<div><div class="sub">Lean</div><p class="hint">Not checked by Lean: ${esc(L.reason || "")}.</p></div>`;
+  const tone = { checked: "ok", partial: "warn", failed: "bad", library_only: "ok" }[L.status] || "";
+  const label = { checked: "every theorem accepted", partial: "partly proved", failed: "a theorem was REJECTED", library_only: "library theorems only" }[L.status] || L.status;
+  const th = [];
+  for (const t of L.theorems || []) {       // a long list of facts is split into theorems of 25: show one row
+    const about = t.about.replace(/ \(facts [^)]*\)$/, ""), last = th[th.length - 1];
+    if (last && last.about === about && last.kind === t.kind) {
+      last.facts += t.facts; last.parts += 1; last.lastName = t.name;
+      if (t.result !== "checked") { last.result = t.result; last.error = last.error || t.error; }
+    } else th.push({ ...t, about, parts: 1 });
+  }
+  th.forEach((t) => { if (t.parts > 1) t.name = `${t.name} … ${t.lastName} (${t.parts} theorems)`; });
+  let h = `<div><div class="sub">Checked again by Lean ${L.lean ? `<span class="muted" style="text-transform:none;letter-spacing:0">· ${esc(L.lean)}${L.seconds != null ? ` · ${L.seconds} s` : ""}</span>` : ""}</div>
+    <p><span class="chip ${tone}">${esc(label)}</span></p>
+    <div class="callout">Z3 is a solver: it searches and its “unsat” is trusted. Lean is a proof checker with a small kernel. neo writes what Z3 decided as Lean theorems about the exact same formulas, and Lean checks them independently.
+      <b>decide +kernel</b>: Lean's kernel evaluates the exact fractions itself (a rejection means Lean disagrees with Z3, and the run goes to review).
+      <b>grind</b>: Lean proves the statement for every value of the unknowns, from only the rows Z3 says are binding.</div>`;
+  if (th.length) h += `<div class="scroll"><table class="t"><tr><th>theorem</th><th>what it says</th><th>how Lean proved it</th><th class="num">facts</th><th>result</th></tr>
+    ${th.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td>${esc(t.about)}</td><td class="mono">${esc(t.tactic.replace(/^intro [^;]*; /, ""))}</td><td class="num">${fmtNum(t.facts)}</td><td><span class="chip ${t.result === "checked" ? "ok" : t.result === "rejected" ? "bad" : "warn"}">${esc(t.result)}</span>${t.error ? `<div class="m mono">${esc(t.error)}</div>` : ""}</td></tr>`).join("")}</table></div>`;
+  if (L.reason && L.status === "library_only") h += `<p class="hint">${esc(L.reason)}.</p>`;
+  if (L.cites?.length) h += `<div class="sub">Why this holds for every row, not just the rows Lean saw</div>
+    <table class="t">${L.cites.map((c) => `<tr><td class="mono">${esc(c.theorem)}</td><td>${esc(c.says)}</td></tr>`).join("")}</table>
+    <p class="hint">Proved once for every run in <code>lean/Neo</code> (library ${esc(L.library || "")}); <code>neo lean build</code> rebuilds it and confirms no step is left unproved.</p>`;
+  if (L.skipped?.length) h += `<ul class="checks">${L.skipped.map((s) => `<li><span class="ic w">!</span><div class="m">${esc(s)}</div></li>`).join("")}</ul>`;
+  if (L.source) h += `<details><summary>The Lean file for this run (people only; never sent to the LLM)</summary><div><div class="codebox"><pre>${esc(L.source)}</pre></div></div></details>`;
+  return h + "</div>";
+}
+
+const BODY = {
+  pin(d) {
+    const p = d.pin;
+    return `<div class="grid2">
+      <div><div class="sub">Data snapshot ${esc(p.snapshot)}</div><table class="t"><tr><th>table</th><th>version</th><th class="num">rows</th></tr>
+        ${p.tables.map((t) => `<tr><td class="mono">${esc(t.table)}</td><td class="mono muted">${esc(t.version)}</td><td class="num">${t.rows != null ? fmtNum(t.rows) : "—"}</td></tr>`).join("")}</table></div>
+      <div><div class="sub">Ontology and rules</div><dl class="kv"><dt>ontology</dt><dd class="mono">${esc(p.ontology_version)}</dd>
+        ${p.rules.map((r) => `<dt class="mono">${esc(r.id)}</dt><dd>v${esc(r.version)} · ${esc(r.status)} · <span class="mono muted">${esc((r.hash || "").slice(0, 12))}</span></dd>`).join("")}</dl>
+        <p class="hint">Replaying this run later uses exactly these versions, so the answer can be reproduced.</p></div></div>`;
+  },
+  retrieve(d) {
+    const r = d.retrieve || {};
+    if (r.needs_clarification) return `<div class="callout llm"><b>Clarification needed:</b> ${esc(r.clarification)}</div>`;
+    const max = Math.max(...(r.links || []).map((l) => l.score), 1);
+    return `<div class="grid2">
+      <div><div class="sub">Words in the question → ontology objects</div>
+        <table class="t"><tr><th>matched words</th><th>ontology object</th><th>kind</th><th style="width:80px">score</th></tr>
+        ${(r.links || []).map((l) => `<tr><td>“${esc(l.matched)}”</td><td class="mono">${esc(l.id)}</td><td>${esc(l.kind)}</td><td><div class="bar" style="width:${Math.round(100 * l.score / max)}%"></div></td></tr>`).join("")}</table>
+        ${(r.unlinked_words || []).length ? `<p class="hint">Not linked: ${r.unlinked_words.map(esc).join(", ")}</p>` : ""}</div>
+      <div><div class="sub">What goes into the briefing</div><dl class="kv">
+        <dt>entities</dt><dd>${(r.entities || []).map((e) => `<span class="chip acc">${esc(e)}</span>`).join(" ")}</dd>
+        <dt>related</dt><dd>${(r.neighbours || []).map((e) => `<span class="chip">${esc(e)}</span>`).join(" ") || "—"}</dd>
+        <dt>metrics</dt><dd class="mono">${(r.metrics || []).map(esc).join(", ") || "—"}</dd>
+        <dt>constraints</dt><dd class="mono">${(r.constraints || []).map(esc).join(", ") || "—"}</dd>
+        <dt>rules</dt><dd class="mono">${(r.rules || []).map(esc).join(", ") || "—"}</dd>
+        <dt>hidden fields</dt><dd>${r.hidden_fields || 0} <span class="muted">(above this user's clearance; the LLM never learns they exist)</span></dd></dl></div></div>
+      <details><summary>Exactly what the LLM is shown: the ontology briefing (no row data)</summary><div><div class="codebox"><pre>${esc(r.briefing)}</pre></div></div></details>
+      <details><summary>The fixed instructions sent with every question (role, how to write a model, functions)</summary><div>
+        <div class="codebox"><pre>${esc(r.role)}\n\n${esc(r.manual)}\n\n## Functions\n${esc(r.functions)}</pre></div></div></details>`;
+  },
+  formalize(d) {
+    const f = d.formalize || {};
+    const atts = f.attempts || [];
+    const calls = f.llm_calls || [];
+    let h = `<div class="callout llm">The LLM receives the briefing above plus this request, and replies with a JSON <b>model</b>: the question restated in ontology vocabulary. It does not compute anything and never sees rows.</div>
+      <details><summary>The request</summary><div><div class="codebox"><pre>${esc(f.prompt)}</pre></div></div></details>`;
+    atts.forEach((a, i) => {
+      const ok = !(a.errors || []).length;
+      h += `<div class="att"><div class="ah">Attempt ${i + 1} ${ok ? '<span class="chip ok">accepted</span>' : '<span class="chip bad">rejected, errors sent back to the LLM</span>'}</div><div class="ab">
+        ${a.model ? `<div class="codebox"><pre>${jsonHtml(a.model)}</pre></div>` : '<div class="hint">The reply had no JSON object.</div>'}
+        ${ok ? "" : `<div class="callout bad"><b>Validator / prover errors</b><ul>${a.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></div>`}</div></div>`;
+    });
+    if (f.failed) h += `<div class="callout bad">No valid model after ${atts.length} attempts, so no answer is given.</div>`;
+    if (calls.length) h += `<div><div class="sub">LLM calls in this run</div><table class="t"><tr><th>task</th><th>model</th><th class="num">tokens in</th><th class="num">tokens out</th><th class="num">ms</th></tr>
+      ${calls.map((c) => `<tr><td>${esc(c.task)}</td><td class="mono">${esc(c.model)}</td><td class="num">${fmtNum(c.input_tokens)}</td><td class="num">${fmtNum(c.output_tokens)}</td><td class="num">${fmtNum(Math.round(c.ms || 0))}</td></tr>`).join("")}</table></div>`;
+    return h;
+  },
+  ontology(d) {
+    const u = d.ontology_use;
+    if (!u) return '<div class="hint">No model was produced, so there is nothing to trace.</div>';
+    const enforced = u.constraints.filter((c) => c.enforced), other = u.constraints.filter((c) => !c.enforced);
+    const conRow = (c) => {
+      const h = c.handled;
+      const status = c.enforced
+        ? (h ? `<span class="chip ok">${h.applied ? "applied" : "not applicable"}</span><div class="hint" style="margin:4px 0 0">${esc(h.text)}</div>` : '<span class="chip bad">not addressed: model rejected</span>')
+        : (h ? `<span class="chip">${h.applied ? "applied" : "not applicable"}</span><div class="hint" style="margin:4px 0 0">${esc(h.text)}</div>` : '<span class="hint">context only</span>');
+      return `<tr><td><span class="mono">${esc(c.id)}</span><div style="margin-top:4px"><span class="chip ${c.severity === "block" ? "bad" : ""}">${esc(c.severity)}</span> <span class="chip">${esc(c.kind)}</span></div></td>
+        <td>${esc(c.description)}${c.formula ? `<div class="mono hint">${esc(c.formula)}</div>` : ""}</td>
+        <td>${c.why.length ? c.why.map((w) => `<div>${esc(w)}</div>`).join("") : '<span class="hint">sent as background: it is about an entity in scope</span>'}${c.word_only ? '<div class="hint">(legal and methodology rules apply by wording only)</div>' : ""}</td>
+        <td>${status}</td></tr>`;
+    };
+    return `<div class="callout">This is where the ontology does its work. Words in the question were matched to ontology objects; each object brings its meaning and its column. The constraints attached to those objects were sent to the LLM, and the <b>block</b> ones that applied had to be answered in the model's grounding.</div>
+      <div><div class="sub">1 · Words in your question → ontology → data</div>
+      <div class="scroll"><table class="t"><tr><th>words</th><th>matched object</th><th>what it means</th><th>field → physical column</th></tr>
+      ${u.links.map((l) => `<tr><td>“${esc(l.matched)}”${l.score != null ? `<div class="hint">score ${l.score}</div>` : ""}</td><td><span class="chip acc">${esc(l.kind)}</span><div class="mono" style="margin-top:4px">${esc(l.id)}</div></td><td>${esc(l.meaning)}</td>
+        <td>${l.fields.map((f) => `<div><span class="mono" style="color:var(--f)">${esc(f.entity)}.${esc(f.name)}</span> → <span class="mono">${f.column ? esc(f.table + "." + f.column) : "= " + esc(f.expression)}</span> <span class="hint">[${esc(f.unit || "no unit")}${f.time ? ", " + esc(f.time) : ""}]</span></div>`).join("") || '<span class="hint">no single column (entity, metric or concept)</span>'}${l.hidden ? `<div class="hint">+${l.hidden} above your clearance</div>` : ""}</td></tr>`).join("")}</table></div>
+      ${u.unlinked.length ? `<p class="hint">Words that matched nothing: ${u.unlinked.map(esc).join(", ")}</p>` : ""}</div>
+      <div class="grid2"><dl class="kv"><dt>entities in scope</dt><dd>${u.entities.map((e) => `<span class="chip acc">${esc(e)}</span>`).join(" ")}${u.neighbours.length ? " + related " + u.neighbours.map((e) => `<span class="chip">${esc(e)}</span>`).join(" ") : ""}</dd>
+        <dt>approved metrics offered</dt><dd class="mono">${u.metrics.map(esc).join(", ") || "—"}</dd>
+        <dt>scenario sets offered</dt><dd class="mono">${u.scenario_sets.map(esc).join(", ") || "—"}</dd>
+        <dt>hidden fields</dt><dd>${u.hidden_fields} <span class="muted">(above your clearance; never shown to the LLM)</span></dd>
+        <dt>terms the model cites</dt><dd>${u.terms_cited.map((t) => `<span class="chip">${esc(t.name)}</span>`).join(" ") || "—"}</dd></dl>
+        <div>${u.rules.length ? `<div class="sub">Rules</div>${u.rules.map((r) => `<div class="col" style="margin-bottom:8px"><b>${esc(r.id)}</b> <span class="chip ${r.status === "approved" ? "ok" : "warn"}">${esc(r.status)}</span>${r.cited ? ' <span class="chip acc">cited by the model</span>' : ""}<div class="hint">${esc(r.name || "")}</div>${r.formula ? `<div class="mono hint">${esc(r.formula)}</div>` : ""}<div class="mono hint">${esc(Object.entries(r.parameters).map(([k, v]) => k + " = " + v).join(", "))}</div></div>`).join("")}` : '<div class="hint">No legal or business rule applied to this question.</div>'}</div></div>
+      <div><div class="sub">2 · Constraints from the ontology: why each applied, and how the model handled it</div>
+      <div class="scroll"><table class="t"><tr><th>constraint</th><th>what it says</th><th>why it applied</th><th>how the model handled it</th></tr>
+      ${enforced.map(conRow).join("")}${other.map(conRow).join("")}</table></div>
+      <p class="hint">A <b>block</b> constraint is enforced when a trigger word appears in the question, or when the model reads a field or entity it is attached to. The validator then refuses any model that does not say how it honours it. <b>info</b> constraints are only background for the LLM.</p></div>`;
+  },
+  math(d) {
+    if (!d.math) return '<div class="hint">No model.</div>';
+    const a = d.anatomy || [];
+    return `<div class="callout">The JSON model, written as mathematics. <i>r</i> is one row; <i>U</i> the rows of the universe; <i>R</i> the eligible rows. Below the overview, each statement is taken apart term by term.</div>
+      <div class="keys"><span><span class="f">field</span> a column of the data</span><span><span class="d">definition</span> derived per row</span><span><span class="p">parameter</span> a fixed number</span><span><span class="v">unknown</span> solved by Z3</span><span><span class="s">'text'</span> a literal</span></div>
+      <div class="math">${d.math.map((m) => `<div class="lab">${esc(m.label)}</div><div class="eq">${m.html}${m.note ? `<span class="note">${esc(m.note)}</span>` : ""}</div>`).join("")}</div>
+      ${d.model?.interpretation ? `<div class="callout llm"><b>The LLM's interpretation:</b> ${esc(d.model.interpretation)}</div>` : ""}
+      ${a.length ? `<div class="sub" style="margin-top:6px">Each statement, term by term</div>` : ""}
+      ${a.map((s) => `<div class="anat">
+        <div class="anat-h"><b>${esc(s.label)}</b><span class="chip ${/code/.test(s.origin) ? "warn" : /LLM/.test(s.origin) ? "llm" : "acc"}">${esc(s.origin)}</span></div>
+        <div class="anat-b">
+          <div class="math1">${s.math}</div>
+          <div><span class="sub">In words</span><div>${esc(s.english)}</div></div>
+          <div class="mono hint">model text: ${esc(s.src)}</div>
+          ${s.symbols.length ? `<div class="scroll"><table class="t"><tr><th>symbol</th><th>what it is</th><th>meaning</th><th>unit</th><th>comes from</th><th>value in this run</th></tr>
+            ${s.symbols.map((g) => `<tr><td><span class="${{ field: "f", definition: "d", parameter: "p", unknown: "v" }[g.kind] || "f"}">${esc(g.symbol)}</span></td><td>${esc(g.what)}${g.term ? `<div class="hint">business term: ${esc(g.term)}</div>` : ""}</td><td>${esc(g.meaning || "—")}</td><td class="mono">${esc(g.unit || "—")}${g.time ? `<div class="hint">${esc(g.time)}</div>` : ""}</td><td class="mono">${esc(g.source || "")}</td><td class="mono">${g.value != null ? esc(typeof g.value === "object" ? JSON.stringify(g.value) : g.value) : '<span class="muted">per row</span>'}</td></tr>`).join("")}</table></div>` : ""}
+          ${s.operators.length ? `<div class="ops">${s.operators.map((o) => `<span class="op-chip"><b>${esc(o.symbol)}</b> ${esc(o.meaning)}</span>`).join("")}</div>` : ""}
+        </div></div>`).join("")}
+      <div class="hint">How it is solved for this form (<b>${esc(d.model?.form)}</b>): ${esc(FORM_HOW[d.model?.form] || "")} See step “Solve and prove”.</div>`;
+  },
+  columns(d) {
+    const cols = d.columns || [];
+    if (!cols.length) return '<div class="hint">This model uses no columns (for example, a plain count).</div>';
+    return `<div class="grid2">${cols.map((c) => `<div class="col">
+      <div class="nm">${esc(c.name)}</div>
+      <div class="phys">${esc(c.entity_name)} → ${c.column ? `${esc(c.table)}.${esc(c.column)}` : `computed: ${esc(c.expression)}`}${c.sql_type ? ` · ${esc(c.sql_type)}` : ""}</div>
+      ${c.base?.length ? `<div class="phys">from column${c.base.length > 1 ? "s" : ""} ${c.base.map((b) => `${esc(c.table)}.${esc(b.column)}${b.unit ? ` [${esc(b.unit)}]` : ""}`).join(", ")}</div>` : ""}
+      <div class="desc">${esc(c.description) || '<span class="muted">No description in the ontology.</span>'}</div>
+      ${c.term ? `<div class="term"><b>${esc(c.term.name)}</b> (business term): ${esc(c.term.definition)}</div>` : ""}
+      <dl class="kv"><dt>unit</dt><dd>${esc(c.unit || "—")}</dd>
+        ${c.time_semantics ? `<dt>time</dt><dd>${esc({ stock: "stock: a level at one point in time", flow: "flow: an amount over one period", ytd: "year-to-date" }[c.time_semantics] || c.time_semantics)}</dd>` : ""}
+        <dt>classification</dt><dd>${esc(c.classification)}</dd>
+        ${c.profile ? `<dt>in the data</dt><dd>${esc(c.profile)}</dd>` : ""}</dl>
+      ${(c.constraints || []).map((k) => `<div class="term" style="border-color:var(--llm-line)"><b>${esc(k.id)}</b> [${esc(k.severity)}]: ${esc(k.description)}</div>`).join("")}
+      <div class="tags">${(c.used_in || []).map((x) => `<span class="chip acc">used in ${esc(x)}</span>`).join("")}</div></div>`).join("")}</div>`;
+  },
+  validate(d) {
+    const v = d.validate || {};
+    const items = [];
+    const ok = (t, m) => items.push(["✓", "", t, m]), warn = (t, m) => items.push(["!", "w", t, m]), bad = (t, m) => items.push(["✗", "x", t, m]);
+    (v.errors || []).forEach((e) => bad("Error", e));
+    ok("Every name exists in the ontology", "Entities, fields, relations and functions all resolve; no physical table or column names are used.");
+    if ((v.joins || []).length) v.joins.forEach((j) => (j.cardinality === "one_to_many" ? warn : ok)(`Join ${j.from} → ${j.alias} (${j.entity})`, `${j.relation}, ${j.cardinality}${j.cardinality === "one_to_many" ? `: rows repeat; grain = ${v.grain || "?"}` : ": no double counting"}`));
+    else ok("No joins", "One entity, so no fan-out risk.");
+    const pu = v.notes?.param_units || {};
+    ok("Units and scales agree", Object.keys(pu).length ? "Parameter units: " + Object.entries(pu).map(([k, x]) => `${k} [${x || "none"}]`).join(", ") : "No mixed units in comparisons or sums.");
+    const pol = v.policies || [];
+    ok(`Access for ${d.run.principal.name}`, `Clearance ${d.run.principal.clearance}.` + (pol.length ? " Row policy added by code: " + pol.map((x) => `${x.alias}: ${x.expr}`).join("; ") : " No row policy."));
+    (v.access_denied || []).forEach((a) => bad("Access denied", a));
+    (v.grounding || []).forEach((g) => ok(`Constraint ${g.id} ${g.applied ? "applied" : "not applicable"}`, `${g.how || ""}${g.description ? " — " + g.description : ""}`));
+    if (v.needs_approval) warn("Needs approval", v.needs_approval);
+    (v.warnings || []).forEach((w) => warn("Warning", w));
+    return `<ul class="checks">${items.map(([i, c, t, m]) => `<li><span class="ic ${c}">${i}</span><div><b>${esc(t)}</b><div class="m">${esc(m)}</div></div></li>`).join("")}</ul>
+      ${(v.terms || []).length ? `<div class="hint">Business terms the model is grounded in: ${v.terms.map((t) => `<span class="chip">${esc(t.name)}</span>`).join(" ")}</div>` : ""}`;
+  },
+  execute(d) {
+    const q = d.queries || [];
+    return `<div class="callout">Every number is computed inside the lake on the pinned snapshot. Arithmetic is exact: integers as <code>HUGEINT</code>, decimals as numerator/denominator, never floating point. The user's row policy is part of every <code>WHERE</code>.</div>
+      ${q.map((x, i) => `<div><div class="sub">Query ${i + 1}: ${esc(x.purpose)} <span class="muted" style="text-transform:none;letter-spacing:0">· ${x.rows ?? "?"} row(s) · ${x.ms ?? "?"} ms</span></div><div class="codebox"><pre>${sqlHtml(x.sql)}</pre></div></div>`).join("")}`;
+  },
+  prove(d) {
+    const p = d.proof || {}, ex = p.explain || {}, form = p.form;
+    const qs = d.queries || [];
+    let story = [];
+    if (form === "value" || form === "table") {
+      story = [`The compiler turned every aggregate (Σ, |…|, share, …) into exact integer SQL and the lake computed them over ${fmtNum(p.eligible_rows)} eligible row(s)${form === "table" ? ", one result per group" : ""}. No floating point is used: decimals are kept as numerator / denominator.`,
+        "For each answer, Z3 was given the equation “answer = the exact numbers from the lake” and then asked: can the answer be anything else? Z3 replied “unsat” (impossible), which proves the value.",
+        "The independent check then recomputed everything a second way (next step)."];
+    } else if (form === "extremum") {
+      story = ["The lake listed the candidate rows or groups, ranked exactly.", "A verification query counted, for each rank, how many eligible rows are strictly better. Zero means nothing beats the answer.", "Z3 Optimize picked the best candidate as a final cross-check."];
+    } else if (form === "set" || (form === "check" && p.verification?.[0]?.method?.startsWith("verification query"))) {
+      story = ["The lake listed the matching rows and counted them.", "A counterexample query searched every eligible row for one that breaks the condition. None found means it holds on this snapshot."];
+    } else if (["optimisation", "feasibility", "check"].includes(form)) {
+      const mode = ex.mode;
+      story = [mode === "cegar"
+        ? `There are ${fmtNum(p.eligible_rows)} eligible rows, more than Z3 takes at once (5,000), so neo used counterexample-guided refinement: give Z3 a small working set of rows, take its answer, ask the lake which of ALL rows break it, add those rows, and repeat until no row breaks it.`
+        : mode === "full" ? `All ${fmtNum(p.eligible_rows)} eligible rows were small enough to give to Z3 directly: one formula per row.`
+        : "The constraints only use whole-set numbers, so the lake computed those exactly and Z3 solved over them.",
+        "Every “for every row” constraint (∀) becomes one formula per row, with that row's own numbers filled in. The unknowns stay as variables for Z3 to choose.",
+        form === "optimisation" ? "Z3 Optimize found the best value of the objective. Two more checks then prove it: nothing better is allowed (unsat), and the best value is actually reachable (sat), with zero violating rows in the lake."
+          : form === "feasibility" ? "Z3 looked for values of the unknowns satisfying everything. If none exist, it names the smallest set of constraints that clash, and tests dropping each one."
+          : "Z3 checked whether the claim follows from the constraints."];
+    }
+    let h = story.length ? `<div class="sub">How it was solved</div><ol class="story">${story.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : "";
+    if (ex.rounds?.length) h += `<div><div class="sub">Solving rounds</div><div class="scroll"><table class="t"><tr><th>round</th><th>what Z3 did</th><th class="num">rows Z3 saw</th><th>Z3's answer</th><th class="num">rows in the lake that break it</th><th class="num">rows added</th></tr>
+      ${ex.rounds.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.solve)}</td><td class="num">${fmtNum(r.working_rows)}</td><td class="mono">${esc(JSON.stringify(r.candidate))}</td><td class="num">${r.violating_rows ? `<span style="color:var(--bad)">${fmtNum(r.violating_rows)}</span>` : '<span style="color:var(--ok)">0 ✓</span>'}</td><td class="num">${fmtNum(r.added)}</td></tr>`).join("")}</table></div>
+      <p class="hint">A round with zero breaking rows ends the loop. Because a subset of rows can only relax the constraints, an optimum that holds on every row of the lake is the true optimum.</p></div>`;
+    if (ex.smt_sample) h += `<div><div class="sub">What Z3 actually received${ex.sample_rows?.length ? ` (first ${ex.sample_rows.length} rows shown)` : ""}</div>
+      ${ex.sample_rows?.length ? `${valueHtml(ex.sample_rows)}<p class="hint">Each row above becomes one formula below, with that row's numbers filled in as exact fractions (never rounded). Z3 may reorder a formula, for example writing a ≥ b as b ≤ a; the meaning is the same.</p>` : ""}
+      <div class="codebox"><pre>${esc(ex.smt_sample)}</pre></div><p class="hint">This is SMT-LIB, the language Z3 reads. <code>(declare-fun cut () Real)</code> declares an unknown; <code>(assert …)</code> states a fact that must hold; <code>(and …)</code> joins the per-row formulas.</p></div>`;
+    if (ex.z3?.length) h += `<div><div class="sub">What Z3 was asked for each value</div>${ex.z3.map((z) => `<div class="col" style="margin-bottom:8px"><div><span class="mono">${esc(z.what)}</span> = <b>${esc(typeof z.value === "object" ? JSON.stringify(z.value) : z.value)}</b> → <span class="chip ok">${esc(z.result)}</span></div><div class="codebox" style="margin-top:6px"><pre>${esc(z.smt)}</pre></div></div>`).join("")}
+      <p class="hint">Line 2 fixes the answer to the exact number the lake computed. Line 3 (<code>distinct</code>) asks Z3 for any other value. “unsat” means there is none.</p></div>`;
+    h += leanHtml(p.lean);
+    h += `<div class="sub">Checks performed</div><ul class="checks">${(p.verification || []).map((v) => { const good = /proved|done|sat|holds|optimal|library/i.test(v.result || ""); return `<li><span class="ic ${good ? "" : "w"}">${good ? "✓" : "!"}</span><div><b>${esc(v.step)}</b> → <span class="chip ${good ? "ok" : "warn"}">${esc(v.result)}</span><div class="m">${esc(v.method)}${v.detail != null ? ` · ${esc(typeof v.detail === "object" ? JSON.stringify(v.detail) : v.detail)}` : ""}</div></div></li>`; }).join("")}</ul>`;
+    const kv = [];
+    if (p.eligible_rows != null) kv.push(["eligible rows", `${fmtNum(p.eligible_rows)} of ${fmtNum(p.universe_rows)} visible`]);
+    if (p.solver) Object.entries(p.solver).forEach(([k, v]) => kv.push([`solver ${k}`, typeof v === "object" ? JSON.stringify(v) : v]));
+    if (p.exact_values && Object.keys(p.exact_values).length) Object.entries(p.exact_values).forEach(([k, v]) => kv.push([`exact ${k}`, v]));
+    if (p.parameters && Object.keys(p.parameters).length) Object.entries(p.parameters).forEach(([k, v]) => kv.push([`parameter ${k}`, typeof v === "object" ? JSON.stringify(v) : v]));
+    if (p.exactness) kv.push(["exact arithmetic", p.exactness.exact ? "yes" : "no: " + JSON.stringify(p.exactness.inexact)]);
+    if (p.skipped_missing && Object.keys(p.skipped_missing).length) kv.push(["skipped (missing)", JSON.stringify(p.skipped_missing)]);
+    h += `<dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="mono">${esc(v)}</dd>`).join("")}</dl>`;
+    if (p.sensitivity) h += `<div><div class="sub">Sensitivity</div>${valueHtml(p.sensitivity)}</div>`;
+    if (p.backtest) h += `<div><div class="sub">Backtest</div><div class="codebox"><pre>${jsonHtml(p.backtest)}</pre></div></div>`;
+    if (p.evidence?.sample?.length) h += `<details><summary>Evidence: sample of eligible rows (people only; never sent to the LLM)</summary><div>${valueHtml(p.evidence.sample)}</div></details>`;
+    return h;
+  },
+  check(d) {
+    const s = d.proof?.self_check || {};
+    const m = s.matches;
+    return `<div class="callout ${m === true ? "ok" : m === false ? "bad" : ""}"><b>${m === true ? "✓ Matches" : m === false ? "✗ Mismatch — sent to review" : "Not run"}</b> · ${esc(s.method || "")}${s.exact === false ? " <b>(approximate)</b>" : ""}</div>
+      <p class="hint">This path shares no code with the SQL compiler. If the compiler had a bug, the two answers would differ and the status would become <code>mismatch</code>.</p>
+      ${(s.mismatches || []).length ? `<div class="codebox"><pre>${jsonHtml(s.mismatches)}</pre></div>` : ""}${s.note ? `<p class="hint">${esc(s.note)}</p>` : ""}`;
+  },
+  review(d) {
+    const r = d.review || {};
+    return `<div class="callout llm">The LLM re-reads its own model and the result. If it revises, the new model is validated and proved again from scratch.</div>
+      <dl class="kv"><dt>verdict</dt><dd><span class="chip ${r.verdict === "revise" ? "warn" : "ok"}">${esc(r.verdict || "—")}</span></dd>
+      ${r.applied != null ? `<dt>revision applied</dt><dd>${r.applied ? "yes" : "no"}</dd>` : ""}</dl>
+      ${(r.issues || []).length ? `<ul>${r.issues.map((x) => `<li>${esc(typeof x === "object" ? JSON.stringify(x) : x)}</li>`).join("")}</ul>` : ""}
+      ${r.reason ? `<div class="callout bad">${esc(JSON.stringify(r.reason))}</div>` : ""}`;
+  },
+  certify(d) {
+    const c = d.certify || {};
+    const t = state.certTab;
+    return `<div class="subtabs"><button data-cert="full" class="${t === "full" ? "on" : ""}">Full certificate (people)</button><button data-cert="llm" class="${t === "llm" ? "on" : ""}">LLM-safe certificate (what the answer step sees)</button></div>
+      <div class="codebox" style="max-height:560px;background:var(--panel)">${md(t === "full" ? c.full : c.llm)}</div>`;
+  },
+  answer(d) {
+    return `${d.answer ? md(d.answer) : '<div class="hint">No answer text.</div>'}
+      <p class="hint">Written by the LLM from the LLM-safe certificate only. The numbers it may use are the proved ones above.</p>`;
+  },
+  route(d) {
+    const r = d.route || {};
+    const reasons = r.reasons || [];
+    let h = reasons.length
+      ? `<div class="callout llm"><b>Sent to human review</b><ul>${reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${r.review ? `Review status: <b>${esc(r.review.status)}</b>${r.review.reviewer ? ` by ${esc(r.review.reviewer)}` : ""}` : ""}</div>`
+      : '<div class="callout ok"><b>✓ Delivered without review</b> — clean proof, exact check, not high impact.</div>';
+    const a = d.audit || [];
+    if (a.length) h += `<div><div class="sub">Audit log entries for this run (hash-chained)</div><div class="scroll"><table class="t"><tr><th>time</th><th>event</th><th>actor</th><th>hash</th><th>previous</th></tr>
+      ${a.map((e) => `<tr><td class="mono">${esc((e.time || "").replace("T", " ").slice(0, 19))}</td><td>${esc(e.event)}</td><td>${esc(e.actor)}</td><td class="mono">${esc(e.hash.slice(0, 12))}…</td><td class="mono muted">${esc(e.prev.slice(0, 12))}…</td></tr>`).join("")}</table></div>
+      <p class="hint">Each entry's hash covers the previous entry's hash, so editing any past entry breaks the chain (<code>neo audit</code> checks it).</p></div>`;
+    return h;
+  },
+};
+
+const FORM_HOW = {
+  value: "the lake computes exact aggregates; Z3 re-derives each value and proves no other value is possible.",
+  table: "exact aggregates per group; Z3 proves every cell.",
+  extremum: "candidates come from the lake; a verification query proves no other row beats the answer.",
+  set: "the members are listed and their count is re-derived independently.",
+  check: "a search for a counterexample over every row; none found means the claim holds on this snapshot.",
+  feasibility: "Z3 searches for values of the unknowns satisfying every constraint, or reports which constraints clash.",
+  optimisation: "Z3 finds the optimum; above 5,000 rows it uses refinement (solve on a subset, check all rows in SQL, add violators, repeat) and proves nothing better is allowed.",
+  not_expressible: "nothing is computed; the interpretation says what data would be needed.",
+};
+
+/* ---------------- data dictionary ---------------- */
+async function loadOntology() {
+  if (!state.ont) {
+    $("#ent-view").innerHTML = '<div class="panel empty">Loading…</div>';
+    try { state.ont = await api("/ui/ontology"); } catch (e) { $("#ent-view").innerHTML = `<div class="panel empty">${esc(e.message)}</div>`; return; }
+  }
+  const o = state.ont;
+  if (!state.ent || !o.entities.some((e) => e.id === state.ent)) state.ent = o.entities[0]?.id;
+  $("#ents").innerHTML = o.entities.map((e) => `<button data-id="${esc(e.id)}" class="${e.id === state.ent ? "on" : ""}">${esc(e.name || e.id)}<div class="hint" style="margin:0">${e.fields.length} fields · table ${esc(e.table)}</div></button>`).join("")
+    + `<p class="hint">Ontology ${esc(o.version)}. Fields above your clearance are not listed.</p>`;
+  $("#ents").onclick = (ev) => { const b = ev.target.closest("button"); if (b) { state.ent = b.dataset.id; loadOntology(); } };
+  const e = o.entities.find((x) => x.id === state.ent);
+  if (!e) return;
+  const rels = o.relations.filter((r) => r.from === e.id || r.to === e.id);
+  const mets = o.metrics.filter((m) => m.entity === e.id);
+  $("#ent-view").innerHTML = `
+    <div class="panel head"><p class="q">${esc(e.name)} <span class="chip mono">${esc(e.id)}</span></p>
+      <p style="margin:4px 0 10px">${esc(e.definition)}</p>
+      <div class="chips"><span class="chip">table ${esc(e.table)}</span><span class="chip">one row per ${esc(e.grain || "row")}</span><span class="chip">key ${esc(e.key)}</span>
+      ${e.rows != null ? `<span class="chip">${fmtNum(e.rows)} rows</span>` : ""}${e.row_policy ? `<span class="chip warn">your row policy: ${esc(e.row_policy)}</span>` : ""}
+      ${e.hidden ? `<span class="chip warn">${e.hidden} field(s) hidden by clearance</span>` : ""}</div></div>
+    <section class="panel sec"><div class="top"><div><h2>Columns (${e.fields.length})</h2><p>What each field means, its unit, and where it comes from in the data.</p></div>
+      <div class="right"><input class="search" id="fsearch" placeholder="Filter fields…"></div></div>
+      <div class="body scroll"><table class="t" id="ftable"><tr><th>field</th><th>meaning</th><th>unit</th><th>source</th><th>in the data</th></tr>
+      ${e.fields.map((f) => `<tr data-s="${esc((f.name + " " + f.description + " " + (f.term || "") + " " + (f.column || "")).toLowerCase())}">
+        <td><span class="mono" style="color:var(--f);font-weight:600">${esc(f.name)}</span><div class="hint" style="margin:0">${esc(f.dtype || "")}${f.time_semantics ? " · " + esc(f.time_semantics) : ""} · ${esc(f.classification)}</div></td>
+        <td>${esc(f.description)}${f.term ? `<div class="hint" style="margin:2px 0 0"><b>${esc(f.term)}</b>: ${esc((f.term_definition || "").slice(0, 220))}</div>` : ""}</td>
+        <td>${esc(f.unit || "—")}</td>
+        <td class="mono" style="font-size:12px">${f.column ? esc(e.table + "." + f.column) : "= " + esc(f.expression)}</td>
+        <td style="font-size:12px;color:var(--muted)">${esc(f.profile || "")}</td></tr>`).join("")}</table></div></section>
+    ${rels.length ? `<section class="panel sec"><div class="top"><div><h2>Joins</h2><p>How this entity connects to others. Cardinality decides whether sums double count.</p></div></div><div class="body"><table class="t"><tr><th>relation</th><th>from → to</th><th>on</th><th>cardinality</th></tr>
+      ${rels.map((r) => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.from)} → ${esc(r.to)}</td><td class="mono">${esc(r.on.map((p) => p.join(" = ")).join(", "))}</td><td>${esc(r.cardinality)}</td></tr>`).join("")}</table></div></section>` : ""}
+    ${mets.length ? `<section class="panel sec"><div class="top"><div><h2>Approved metrics</h2></div></div><div class="body"><table class="t"><tr><th>metric</th><th>formula</th><th>unit</th></tr>
+      ${mets.map((m) => `<tr><td><b>${esc(m.name)}</b><div class="hint" style="margin:0">${esc(m.description)}</div></td><td class="mono">${esc(m.expression)}</td><td>${esc(m.unit || "")}</td></tr>`).join("")}</table></div></section>` : ""}`;
+  $("#fsearch").oninput = (ev) => { const q = ev.target.value.toLowerCase(); document.querySelectorAll("#ftable tr[data-s]").forEach((tr) => tr.classList.toggle("hidden", !!q && !tr.dataset.s.includes(q))); };
+}
+
+/* ---------------- ontology layer explainer ---------------- */
+const KINDS = [
+  ["terms", "Terms", "The business vocabulary: a name, a definition and aliases (other words people use). The linker matches question words against these."],
+  ["entities", "Entities", "Things that have rows. Each names its physical table, its key, its grain (what one row is) and its time field."],
+  ["fields", "Fields", "The names the model may use. Each maps to a physical column or to a formula over other fields, and carries a unit, a time meaning and a visibility level."],
+  ["relations", "Relations", "Joins between entities, with cardinality (which decides whether a sum double counts), and meaning links between terms."],
+  ["constraints", "Constraints", "What the model must respect. Block ones must be addressed in every model they apply to, or the model is rejected."],
+  ["metrics", "Metrics", "Approved formulas. The model is told to prefer them over writing its own."],
+  ["scenario_sets", "Scenario sets", "Approved windows of real history, used for likelihood and stress questions."],
+  ["evidence", "Evidence", "Measured facts with their source, which justify the constraints and definitions."],
+];
+const USES = [
+  ["Term name and aliases", "Linker", "Matches the question's words to choose which part of the ontology goes into the LLM's briefing."],
+  ["Field column or formula", "Compiler", "Turns the model's names into SQL on the pinned table version. Formulas expand inline, in exact arithmetic."],
+  ["Unit", "Validator", "Rejects adding or comparing different units or scales (thousands vs billions, basis points vs ratio) until the model converts."],
+  ["Time meaning", "Validator", "Rejects any use of a year-to-date field and adding a stock to a flow; warns when a stock is summed across rows."],
+  ["Classification", "Retrieval and validator", "Hides fields above the user's clearance from the briefing; rejects a model that names one anyway."],
+  ["Join cardinality", "Validator", "Detects joins that repeat rows and forbids summing the repeated side."],
+  ["Block constraints and triggers", "Validator", "Forces the model to state, in its grounding, how it honours each constraint that applies."],
+  ["Metrics, scenario sets", "Briefing", "Gives the model approved formulas and history windows to reuse."],
+  ["Whole document", "Lint at publish", "Checks every column, join key, unit and reference against the data before a version can be published."],
+  ["Version", "Run store", "Each run pins one immutable version; a new version becomes current only if the golden questions pass."],
+];
+const TIME_MEANING = { stock: "a level at one point in time (assets, balance)", flow: "an amount over one period (income in a quarter)",
+  ytd: "year-to-date, accumulates from January", none: "not a money amount over time (ids, text, dates, ratios)" };
+
+function hbars(pairs, label = (k) => esc(k)) {
+  const max = Math.max(1, ...pairs.map((p) => p[1]));
+  return `<div class="hbars">${pairs.map(([k, n]) => `<div>${label(k)}</div><div class="track"><div class="fill" style="width:${(100 * n / max).toFixed(1)}%"></div></div><div class="n">${n}</div>`).join("")}</div>`;
+}
+
+const PIPE = `<div class="pipe"><svg viewBox="0 0 1000 150" role="img" aria-label="Where the ontology is used: the linker matches question words to terms, the briefing sends only the relevant part to the LLM, the LLM writes a model in ontology names, the validator checks it against units, time meaning, access, joins and constraints, and the compiler maps fields to physical columns in SQL.">
+  <defs><marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="4" y="20" width="150" height="58" rx="8" class="bx"/><text x="79" y="45" text-anchor="middle" class="tt">Question</text><text x="79" y="63" text-anchor="middle" class="st2">plain English</text>
+  <rect x="190" y="20" width="150" height="58" rx="8" class="bx-o"/><text x="265" y="45" text-anchor="middle" class="tt">Linker</text><text x="265" y="63" text-anchor="middle" class="st2">words → terms</text>
+  <rect x="376" y="20" width="150" height="58" rx="8" class="bx-o"/><text x="451" y="45" text-anchor="middle" class="tt">Briefing</text><text x="451" y="63" text-anchor="middle" class="st2">relevant slice only</text>
+  <rect x="562" y="20" width="130" height="58" rx="8" class="bx-l"/><text x="627" y="45" text-anchor="middle" class="tt">LLM</text><text x="627" y="63" text-anchor="middle" class="st2">model in field names</text>
+  <rect x="728" y="20" width="120" height="58" rx="8" class="bx-o"/><text x="788" y="45" text-anchor="middle" class="tt">Validator</text><text x="788" y="63" text-anchor="middle" class="st2">checks the rules</text>
+  <rect x="884" y="20" width="112" height="58" rx="8" class="bx-o"/><text x="940" y="45" text-anchor="middle" class="tt">Compiler</text><text x="940" y="63" text-anchor="middle" class="st2">fields → columns</text>
+  <path d="M154,49 H186" class="ar" marker-end="url(#pa)"/><path d="M340,49 H372" class="ar" marker-end="url(#pa)"/><path d="M526,49 H558" class="ar" marker-end="url(#pa)"/><path d="M692,49 H724" class="ar" marker-end="url(#pa)"/><path d="M848,49 H880" class="ar" marker-end="url(#pa)"/>
+  <text x="265" y="104" text-anchor="middle" class="st2">uses aliases</text>
+  <text x="451" y="104" text-anchor="middle" class="st2">entities, fields, joins,</text><text x="451" y="120" text-anchor="middle" class="st2">constraints, metrics</text>
+  <text x="627" y="104" text-anchor="middle" class="st2">never sees tables</text><text x="627" y="120" text-anchor="middle" class="st2">or rows</text>
+  <text x="788" y="104" text-anchor="middle" class="st2">units, time, access,</text><text x="788" y="120" text-anchor="middle" class="st2">joins, constraints</text>
+  <text x="940" y="104" text-anchor="middle" class="st2">columns, formulas</text>
+</svg></div>`;
+
+function lsec(title, about, body) {
+  return `<section class="panel sec"><div class="top"><div><h2>${esc(title)}</h2>${about ? `<p>${about}</p>` : ""}</div></div><div class="body">${body}</div></section>`;
+}
+
+async function loadLearn() {
+  const el = $("#tab-learn");
+  if (!state.learn) {
+    el.innerHTML = '<div class="panel empty">Loading the ontology…</div>';
+    try { state.learn = await api("/ui/ontology/overview"); } catch (e) { el.innerHTML = `<div class="panel empty"><h2>Could not load the ontology</h2><p>${esc(e.message)}</p></div>`; return; }
+  }
+  const o = state.learn, c = o.counts, d = o.detail;
+  const userName = state.cfg.users.find((u) => u.id === state.user)?.name || state.user;
+  let h = `<div class="panel head">
+    <p class="q" style="font-size:22px">The ontology layer</p>
+    <div class="chips"><span class="chip acc">version ${esc(o.version)}</span><span class="chip">data snapshot ${esc(o.snapshot)}</span><span class="chip">shown as ${esc(userName)} · clearance ${esc(o.clearance)}</span></div>
+    <p class="lead">The ontology is the dictionary between business language and the data. The language model writes its answer plan only in ontology names: entities, fields and relations. It never sees a table, a column or a row. Code then uses the ontology to check that plan (units, time meaning, access, joins, rules) and to translate each name into a physical column. This page explains every part of it, from the version that is live now.</p>
+    <div class="counts">
+      <div><b>${c.terms}</b><span>terms</span></div>
+      <div><b>${c.entities}</b><span>entities</span></div>
+      <div><b>${c.fields}</b><span>fields: ${d.columns} columns, ${d.formulas} formulas</span></div>
+      <div><b>${c.relations}</b><span>relations: ${d.joins} joins, ${d.links} meaning links</span></div>
+      <div><b>${c.constraints}</b><span>constraints: ${d.block} block, ${d.info} info</span></div>
+      <div><b>${c.metrics}</b><span>approved metrics</span></div>
+      <div><b>${c.scenario_sets}</b><span>scenario sets</span></div>
+      <div><b>${c.evidence}</b><span>evidence records</span></div>
+    </div></div>`;
+
+  h += lsec("Where the ontology sits in a question", "Blue steps use the ontology. The amber step is the language model.", PIPE);
+
+  h += lsec("Try it: from words to columns", "Type a question or a few words. This runs the real linker and shows what each word matched, what it means, and the column behind it.",
+    `<div class="trace-form"><input id="trace-q" value="total exposure on cards by customer segment" aria-label="Words to trace"><button class="btn" id="trace-go">Trace</button></div><div id="trace-out"></div>`);
+
+  h += lsec("The eight building blocks", "Each card shows what the object holds and a real example from this version.",
+    `<div class="blocks">${KINDS.map(([k, name, what]) => { const ex = o.examples[k]; return `<div class="col"><h4>${esc(name)}<span class="chip acc">${c[k]}</span></h4><p>${esc(what)}</p>${ex ? `<div class="ex"><code>${esc(ex.id)}</code><br>${esc(ex.text)}${ex.extra ? `<br><span class="muted">${esc(ex.extra)}</span>` : ""}</div>` : '<div class="ex muted">none in this version</div>'}</div>`; }).join("")}</div>
+     ${o.term_kinds.length ? `<div><div class="sub">Terms by kind</div>${hbars(o.term_kinds)}</div>` : ""}`);
+
+  h += lsec("Entities and how they join", "An entity is one table seen through the ontology. Joins say how entities connect and how many rows each side has.",
+    `<div class="grid2">${o.entities.map((e) => `<div class="col"><div class="nm">${esc(e.id)}</div><div class="phys">table ${esc(e.table)} · one row per ${esc(e.grain || "row")} · key ${esc(e.key)}${e.time_field ? ` · time ${esc(e.time_field)}` : ""}</div>
+        <div class="desc">${esc(e.definition)}</div>
+        <dl class="kv"><dt>rows</dt><dd>${e.rows != null ? fmtNum(e.rows) : '<span class="muted">not shown under your row policy</span>'}</dd>
+        <dt>fields you see</dt><dd>${e.fields}${e.hidden ? ` <span class="muted">(+${e.hidden} above your clearance)</span>` : ""} · ${e.formulas} formulas</dd>
+        <dt>with a meaning</dt><dd>${e.with_meaning} of ${e.fields}</dd>
+        <dt>visibility</dt><dd>${esc(e.classification)}</dd>
+        ${e.row_policy ? `<dt>your row policy</dt><dd class="mono">${esc(e.row_policy)}</dd>` : ""}</dl></div>`).join("")}</div>
+     ${o.joins.length ? `<div class="scroll"><table class="t"><tr><th>join</th><th>from → to</th><th>on</th><th>alias</th><th>cardinality</th></tr>${o.joins.map((j) => `<tr><td class="mono">${esc(j.id)}</td><td>${esc(j.from)} → ${esc(j.to)}</td><td class="mono">${esc(j.on)}</td><td class="mono">${esc(j.alias || "")}</td><td><span class="chip ${j.cardinality === "one_to_many" ? "warn" : "ok"}">${esc(j.cardinality)}</span></td></tr>`).join("")}</table></div>
+       <p class="hint"><b>many_to_one</b> (each loan has one customer) keeps one row per universe row, so sums stay correct. <b>one_to_many</b> repeats the parent's rows once per child; the validator then forbids summing the repeated side.</p>` : '<p class="hint">No joins in this version.</p>'}`);
+
+  h += lsec("How every field is described", "Three tags on each field drive the validator's checks.",
+    `<div class="grid2">
+      <div><div class="sub">Units</div>${hbars(o.units, (k) => `<span class="mono">${esc(k)}</span>`)}<p class="hint">Two numbers can be added or compared only in the same unit and scale. <span class="mono">USD_thousands</span> must be divided by 10⁶ before it meets billions.</p></div>
+      <div><div class="sub">Time meaning</div>${hbars(o.time, (k) => `<span class="mono">${esc(k)}</span>`)}
+        <ul class="hint" style="padding-left:18px">${o.time.map(([k]) => `<li><b>${esc(k)}</b>: ${esc(TIME_MEANING[k] || "")}</li>`).join("")}</ul></div>
+      <div><div class="sub">Visibility (all ${c.fields} fields)</div>${hbars(o.classification, (k) => `<span class="mono">${esc(k)}</span>`)}<p class="hint">Ladder: public &lt; internal &lt; confidential &lt; restricted. Your clearance is <b>${esc(o.clearance)}</b>, so ${o.hidden_fields} field(s) are left out of your briefings entirely.${Object.keys(o.row_policies || {}).length ? " Your row policy adds " + Object.entries(o.row_policies).map(([k, v]) => `<code>${esc(v)}</code> on ${esc(k)}`).join(", ") + " to every query." : ""}</p></div>
+    </div>`);
+
+  const block = o.constraints.filter((x) => x.severity === "block");
+  h += lsec("Constraints", "Rules the model must respect. They are how the ontology passes on what an expert knows about the data's traps.",
+    `<div class="callout"><b>block</b> constraints are enforced: when one applies, the model's <code>grounding</code> must say how it honours it (or why it does not apply), or the model is rejected and sent back to the LLM. <b>info</b> constraints are only shown as context.<br>A block constraint applies <b>by wording</b> (a trigger word is in the question) or <b>by use</b> (the model reads a field or entity it targets). Legal rules and methodology apply by wording only.</div>
+     ${block.length ? `<div class="scroll"><table class="t"><tr><th>block constraint</th><th>kind</th><th>about</th><th>what it says</th><th>trigger words</th></tr>${block.map((x) => `<tr><td class="mono">${esc(x.id)}</td><td>${esc(x.kind)}</td><td class="mono">${esc(x.target || "")}</td><td>${esc(x.description.slice(0, 220))}${x.description.length > 220 ? "…" : ""}${x.formula ? `<div class="mono hint">${esc(x.formula)}</div>` : ""}</td><td class="hint">${esc(x.triggers.join(", "))}</td></tr>`).join("")}</table></div>` : '<p class="hint">No block constraints.</p>'}
+     <div><div class="sub">All constraints by kind</div>${hbars(o.constraint_kinds)}</div>
+     <details><summary>All ${o.constraints.length - block.length} info constraints</summary><div><table class="t">${o.constraints.filter((x) => x.severity !== "block").map((x) => `<tr><td class="mono">${esc(x.id)}</td><td>${esc(x.description)}</td></tr>`).join("")}</table></div></details>`);
+
+  h += lsec("Metrics, scenario sets and rules", "Approved building blocks the model is told to reuse instead of inventing its own.",
+    `<div class="grid2">
+      <div><div class="sub">Metrics</div>${o.metrics.length ? `<table class="t">${o.metrics.map((m) => `<tr><td><b>${esc(m.name)}</b><div class="mono hint">${esc(m.expression)}</div></td><td class="hint">${esc(m.entity)} · ${esc(m.unit || "")}</td></tr>`).join("")}</table>` : '<p class="hint">None.</p>'}</div>
+      <div><div class="sub">Scenario sets</div>${o.scenario_sets.length ? `<table class="t">${o.scenario_sets.map((x) => `<tr><td><b>${esc(x.name)}</b><div class="mono hint">${esc(x.rows)}</div></td><td class="hint">${esc(x.entity)}${x.approved_by ? " · approved by " + esc(x.approved_by) : ""}</td></tr>`).join("")}</table>` : '<p class="hint">None.</p>'}</div>
+      <div><div class="sub">Rules (rules/ folder)</div>${o.rules.length ? `<table class="t">${o.rules.map((r) => `<tr><td><b>${esc(r.id)}</b> <span class="chip ${r.status === "approved" ? "ok" : "warn"}">${esc(r.status)}</span><div class="hint">${esc(r.name || "")}${r.citation ? " · " + esc(r.citation) : ""}</div>${r.formula ? `<div class="mono hint">${esc(r.formula)}</div>` : ""}</td><td class="mono hint">${esc(Object.entries(r.parameters).map(([k, v]) => `${k} = ${v}`).join(", "))}</td></tr>`).join("")}</table><p class="hint">Only approved rules can be cited. Models read their numbers through <code>rule_param()</code>, so changing a rule changes every answer that cites it.</p>` : '<p class="hint">None.</p>'}</div>
+    </div>`);
+
+  if (o.link_types.length) h += lsec("Meaning links between terms", "These connect concepts, not tables. They do not run as SQL; they go into the briefing so the LLM understands how ideas relate.",
+    hbars(o.link_types));
+
+  h += lsec("How neo uses each part", "", `<div class="scroll"><table class="t"><tr><th>ontology attribute</th><th>used by</th><th>what it does</th></tr>${USES.map(([a, b, x]) => `<tr><td><b>${esc(a)}</b></td><td>${esc(b)}</td><td>${esc(x)}</td></tr>`).join("")}</table></div>`);
+
+  h += lsec("Health checks on this version", "Computed now from the live ontology and the rules folder.",
+    `<ul class="checks health">${o.health.map((x) => `<li><span class="ic ${x.level === "ok" ? "" : x.level === "bad" ? "x" : "w"}">${x.level === "ok" ? "✓" : x.level === "bad" ? "✗" : "!"}</span><div><b>${esc(x.title)}</b><div class="m">${esc(x.detail)}</div></div></li>`).join("")}</ul>`);
+
+  h += lsec("Versions and loading your own ontology", "Published versions are immutable. A run always records which one it used.",
+    `<div class="scroll"><table class="t"><tr><th>version</th><th>published</th><th>note</th><th class="num">terms</th><th class="num">fields</th><th class="num">constraints</th><th></th></tr>${o.versions.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc((v.published || "").replace("T", " ").slice(0, 16))}</td><td>${esc(v.note || "")}</td><td class="num">${v.objects?.terms ?? ""}</td><td class="num">${v.objects?.fields ?? ""}</td><td class="num">${v.objects?.constraints ?? ""}</td><td>${v.is_current ? '<span class="chip ok">current</span>' : ""}</td></tr>`).join("")}</table></div>
+     <div class="codebox"><pre>.venv/bin/python scripts/build_deals_ontology.py --ontology ~/path/to/.evoontology   # 1. build from your ontology
+.venv/bin/neo ontology lint                                                        # 2. check it against the data
+.venv/bin/neo ontology publish --eval golden/core.yaml --note "my ontology"        # 3. publish behind the golden questions</pre></div>`);
+
+  el.innerHTML = h;
+  const go = () => trace($("#trace-q").value);
+  $("#trace-go").onclick = go;
+  $("#trace-q").addEventListener("keydown", (ev) => { if (ev.key === "Enter") go(); });
+  go();
+}
+
+async function trace(text) {
+  const out = $("#trace-out");
+  if (!text.trim()) { out.innerHTML = ""; return; }
+  out.innerHTML = '<p class="hint">Tracing…</p>';
+  let t;
+  try { t = await api("/ui/ontology/trace?q=" + encodeURIComponent(text)); } catch (e) { out.innerHTML = `<p class="hint warn">${esc(e.message)}</p>`; return; }
+  if (!t.links.length) { out.innerHTML = `<div class="callout llm">Nothing in the ontology matches these words, so neo would ask which entity you mean instead of guessing.</div>`; return; }
+  out.innerHTML = `<div class="scroll"><table class="t"><tr><th>words matched</th><th>ontology object</th><th>what it means</th><th>field → physical column</th></tr>
+    ${t.links.map((l) => `<tr><td>“${esc(l.matched)}”<div class="hint">score ${l.score}</div></td><td><span class="chip acc">${esc(l.kind)}</span><div class="mono" style="margin-top:4px">${esc(l.id)}</div></td><td>${esc(l.meaning)}</td>
+      <td>${l.fields.map((f) => `<div><span class="mono" style="color:var(--f)">${esc(f.entity)}.${esc(f.name)}</span> → <span class="mono">${f.column ? esc(f.table + "." + f.column) : "= " + esc(f.expression)}</span> <span class="hint">[${esc(f.unit || "no unit")}${f.time ? ", " + esc(f.time) : ""}]</span></div>`).join("") || '<span class="hint">no field (a whole-entity, metric or concept match)</span>'}${l.hidden ? `<div class="hint">+${l.hidden} field(s) above your clearance</div>` : ""}</td></tr>`).join("")}</table></div>
+    ${t.unlinked.length ? `<p class="hint">Not linked: ${t.unlinked.map(esc).join(", ")}. In a real question, unlinked words go to the curation queue so aliases can be added.</p>` : ""}`;
+}
+
+init().catch((e) => { $("#view").innerHTML = `<div class="panel empty"><h2>Could not start</h2><p>${esc(e.message)}</p></div>`; });
+</script>
+</body>
+</html>

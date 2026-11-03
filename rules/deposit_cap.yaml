@@ -1,0 +1,22 @@
+id: deposit_cap
+version: 1
+status: approved
+approved_by: legal-regulatory
+name: Nationwide 10% deposit cap (Riegle-Neal)
+citation: 12 USC 1842(d)(2)(A); scope (d)(1)(A); exception (d)(5)
+url: https://www.law.cornell.edu/uscode/text/12/1842
+effective_from: "1995-09-29"
+terms: [term_deposit_cap, term_failing_bank_exception, term_interstate_acquisition]
+triggers: [deposit cap, riegle-neal, buy a bank, acquire a bank, acquisition allowed]
+text: >
+  The Board may not approve an application under (d)(1)(A) [acquisition of a bank located in a State other than
+  the home State of the bank holding company] if the applicant controls, or upon consummation of the acquisition
+  would control, more than 10 percent of the total amount of deposits of insured depository institutions in the
+  United States. (d)(5): the Board may approve an acquisition of banks in default or in danger of default, or one
+  with FDIC assistance under 1823(c), without regard to (d)(2).
+formula: "(interstate AND NOT failing) => D_JPM + D_in <= cap * D_US"
+parameters:
+  cap: {value: 0.10, unit: ratio}
+verification: >
+  Statute text read 2026-10-19 from law.cornell.edu through a summarising fetch. Bank-to-bank merger provisions
+  (12 USC 1831u, 1828(c)(13)) not checked.

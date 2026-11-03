@@ -1,0 +1,19 @@
+id: liability_cap
+version: 1
+status: approved
+approved_by: legal-regulatory
+name: Financial-sector liability concentration limit (Dodd-Frank 622)
+citation: 12 USC 1852(b)
+url: https://www.law.cornell.edu/uscode/text/12/1852
+effective_from: "2014-01-01"
+terms: [term_liability_cap]
+triggers: [liability cap, concentration limit, dodd-frank 622]
+text: >
+  A financial company may not merge with or acquire another company if its total consolidated liabilities upon
+  consummation would exceed 10 percent of the aggregate consolidated liabilities of all financial companies at the
+  end of the preceding calendar year. Exceptions: a bank in default or in danger of default; FDIC assistance.
+formula: "NOT failing => L_JPM + L_in <= cap * L_FIN"
+parameters:
+  cap: {value: 0.10, unit: ratio}
+  L_FIN_billion: {value: 23847.731488, unit: USD_billions, note: "Federal Register 2026-12010, in effect 2026-07-01 to 2027-06-30"}
+verification: Statute read 2026-10-19 (summarising fetch); L_FIN from a search result citing the June 2026 Fed notice.

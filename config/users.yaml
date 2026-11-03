@@ -1,0 +1,16 @@
+# One user with full control: the highest clearance (sees every field), no row policies (sees every row),
+# approves reviews, and may run queries of any size.
+# Clearances: public < internal < confidential < restricted. To add users later, add roles and users below;
+# in production the API gateway authenticates (OIDC/SAML) and maps identity-provider groups to these roles.
+
+roles:
+  admin:
+    clearance: restricted
+    approve_reviews: true
+    large_queries: true
+    daily_token_budget: 2000000   # LLM tokens per day; raise it if you need more
+
+users:
+  admin:
+    name: Admin (full access)
+    roles: [admin]
