@@ -267,7 +267,7 @@ input.search { width: 100%; padding: 7px 10px; border: 1px solid var(--line); bo
   <aside class="side">
     <div class="panel box">
       <h3>Ask a question</h3>
-      <textarea id="q" class="q" placeholder="e.g. What is our total exposure on cards?"></textarea>
+      <textarea id="q" class="q" placeholder="e.g. How many failed-bank deals happened in the 1980s?"></textarea>
       <div class="seg" role="tablist">
         <button id="m-live" class="on">Live LLM</button>
         <button id="m-sup">Supplied model (no LLM)</button>
@@ -940,7 +940,7 @@ async function loadLearn() {
   h += lsec("Where the ontology sits in a question", "Blue steps use the ontology. The amber step is the language model.", PIPE);
 
   h += lsec("Try it: from words to columns", "Type a question or a few words. This runs the real linker and shows what each word matched, what it means, and the column behind it.",
-    `<div class="trace-form"><input id="trace-q" value="total exposure on cards by customer segment" aria-label="Words to trace"><button class="btn" id="trace-go">Trace</button></div><div id="trace-out"></div>`);
+    `<div class="trace-form"><input id="trace-q" value="failed-bank deals by decade and pre-deal assets" aria-label="Words to trace"><button class="btn" id="trace-go">Trace</button></div><div id="trace-out"></div>`);
 
   h += lsec("The eight building blocks", "Each card shows what the object holds and a real example from this version.",
     `<div class="blocks">${KINDS.map(([k, name, what]) => { const ex = o.examples[k]; return `<div class="col"><h4>${esc(name)}<span class="chip acc">${c[k]}</span></h4><p>${esc(what)}</p>${ex ? `<div class="ex"><code>${esc(ex.id)}</code><br>${esc(ex.text)}${ex.extra ? `<br><span class="muted">${esc(ex.extra)}</span>` : ""}</div>` : '<div class="ex muted">none in this version</div>'}</div>`; }).join("")}</div>
@@ -955,7 +955,7 @@ async function loadLearn() {
         <dt>visibility</dt><dd>${esc(e.classification)}</dd>
         ${e.row_policy ? `<dt>your row policy</dt><dd class="mono">${esc(e.row_policy)}</dd>` : ""}</dl></div>`).join("")}</div>
      ${o.joins.length ? `<div class="scroll"><table class="t"><tr><th>join</th><th>from → to</th><th>on</th><th>alias</th><th>cardinality</th></tr>${o.joins.map((j) => `<tr><td class="mono">${esc(j.id)}</td><td>${esc(j.from)} → ${esc(j.to)}</td><td class="mono">${esc(j.on)}</td><td class="mono">${esc(j.alias || "")}</td><td><span class="chip ${j.cardinality === "one_to_many" ? "warn" : "ok"}">${esc(j.cardinality)}</span></td></tr>`).join("")}</table></div>
-       <p class="hint"><b>many_to_one</b> (each loan has one customer) keeps one row per universe row, so sums stay correct. <b>one_to_many</b> repeats the parent's rows once per child; the validator then forbids summing the repeated side.</p>` : '<p class="hint">No joins in this version.</p>'}`);
+       <p class="hint"><b>many_to_one</b> (each deal has one buyer) keeps one row per universe row, so sums stay correct. <b>one_to_many</b> repeats the parent's rows once per child; the validator then forbids summing the repeated side.</p>` : '<p class="hint">No joins in this version.</p>'}`);
 
   h += lsec("How every field is described", "Three tags on each field drive the validator's checks.",
     `<div class="grid2">

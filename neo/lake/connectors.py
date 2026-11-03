@@ -1,7 +1,7 @@
 """Connectors bring outside data into the lake as new immutable table versions.
 
 Everything a model can read lives in the lake and is described by the ontology, so external sources
-(FDIC, market data, CRM exports) are ingested here rather than called during a question. That keeps
+(the deals CSV, FDIC history, other exports) are ingested here rather than called during a question. That keeps
 every answer reproducible from a snapshot.
 """
 from __future__ import annotations
@@ -92,43 +92,3 @@ def ingest_fdic(lake: LocalLakehouse, con, sources: List[str], table: str = "ban
               [(f, "BIGINT") for f in fields] + [("BANKS", "BIGINT")]
     return lake.write_from_rows(con, table, columns, rows, "fdic:" + ",".join(sources),
                                 f"{len(rows)} source-quarters")
-
-
-# ---------------------------------------------------------------------- synthetic enterprise data
-REGIONS = [(1, "EMEA", "Europe, Middle East and Africa"), (2, "AMER", "North America"),
-           (3, "APAC", "Asia Pacific"), (4, "LATAM", "Latin America")]
-
-
-def ingest_synthetic(lake: LocalLakehouse, con, customers: int = 20_000, loans: int = 200_000,
-                     seed: int = 7) -> Dict[str, str]:
-    """Deterministic, clearly synthetic regions / customers / loans for scale, join and governance demos."""
-    out = {"regions": lake.write_from_rows(con, "regions", [("region_id", "INTEGER"), ("region_code", "VARCHAR"),
-                                                            ("region_name", "VARCHAR")],
-                                           REGIONS, "synthetic", "4 regions")}
-    h = lambda expr, salt: f"(hash(({expr}) * 1000003 + {seed * 7919 + salt}) % 1000000)"
-    out["customers"] = lake.write_from_sql(con, "customers", f"""
-        SELECT i AS customer_id,
-               CAST({h('i', 1)} % 4 + 1 AS INTEGER) AS region_id,
-               CASE CAST({h('i', 1)} % 4 AS INTEGER) WHEN 0 THEN 'EMEA' WHEN 1 THEN 'AMER'
-                    WHEN 2 THEN 'APAC' ELSE 'LATAM' END AS region_code,
-               CASE WHEN {h('i', 2)} < 700000 THEN 'Retail' WHEN {h('i', 2)} < 930000 THEN 'SME'
-                    ELSE 'Corporate' END AS segment,
-               CAST(20000 + {h('i', 3)} * 3 AS BIGINT) AS annual_income_usd,
-               'Customer ' || CAST(i AS VARCHAR) AS customer_name,
-               DATE '2005-01-01' + CAST({h('i', 4)} % 7000 AS INTEGER) AS onboarded_date
-        FROM range(1, {customers + 1}) t(i)""", "synthetic", f"{customers} customers")
-    cust_ref = f"read_parquet('{lake.path('customers', out['customers'])}')"
-    out["loans"] = lake.write_from_sql(con, "loans", f"""
-        WITH l AS (SELECT i AS loan_id, CAST({h('i', 11)} % {customers} + 1 AS BIGINT) AS customer_id FROM range(1, {loans + 1}) t(i))
-        SELECT l.loan_id, l.customer_id, c.region_code AS booking_region,
-               CASE CAST({h('l.loan_id', 12)} % 4 AS INTEGER) WHEN 0 THEN 'Mortgage' WHEN 1 THEN 'Card'
-                    WHEN 2 THEN 'Auto' ELSE 'Commercial' END AS product,
-               CAST(1000 + ({h('l.loan_id', 13)} * {h('l.loan_id', 14)}) % 4999000 AS BIGINT) AS balance_usd,
-               CAST(150 + {h('l.loan_id', 15)} % 1500 AS INTEGER) AS rate_bp,
-               CAST(({h('l.loan_id', 16)} % 150000) / 1000000.0 AS DECIMAL(9,6)) AS pd,
-               CAST(0.1 + ({h('l.loan_id', 17)} % 7000) / 10000.0 AS DECIMAL(6,4)) AS lgd,
-               DATE '2010-01-01' + CAST({h('l.loan_id', 18)} % 5800 AS INTEGER) AS origination_date,
-               CASE WHEN {h('l.loan_id', 19)} < 940000 THEN 'current' WHEN {h('l.loan_id', 19)} < 985000
-                    THEN 'delinquent' ELSE 'default' END AS status
-        FROM l JOIN {cust_ref} c ON c.customer_id = l.customer_id""", "synthetic", f"{loans} loans")
-    return out

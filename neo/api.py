@@ -223,7 +223,8 @@ def create_app(neo: Optional[Neo] = None, workers: int = 0) -> FastAPI:
         return {"users": users, "llm": llm, "llm_available": ready,
                 "ontology_version": n.store.current_version(), "snapshot": n.catalog.snapshot().id,
                 "examples": [{"id": c["id"], "question": c["question"], "user": c.get("user") or n.directory.default_user(),
-                              "form": (c.get("model") or {}).get("form"), "model": c.get("model")} for c in cases]}
+                              "form": (c.get("model") or {}).get("form"), "model": c.get("model")} for c in cases
+                             if (c.get("user") or n.directory.default_user()) in n.directory.users]}
 
     @app.post("/ui/ask")
     def ui_ask(q: UIAsk, p=Depends(user)):

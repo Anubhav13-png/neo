@@ -15,9 +15,9 @@ def test_rejects_code(bad):
 
 
 def test_alias_field_and_refs():
-    e = parse("cust.segment == 'SME' and balance_usd > max(1, pd)")
+    e = parse("buyer.target_state == 'TX' and ASSET > max(1, EQ)")
     names, calls = refs(e)
-    assert names == {"cust.segment", "balance_usd", "pd"} and calls == {"max"}
+    assert names == {"buyer.target_state", "ASSET", "EQ"} and calls == {"max"}
 
 
 def test_unit_parsing():

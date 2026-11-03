@@ -1,6 +1,7 @@
-"""Shared fixtures: one offline demo platform (synthetic bank history, 20,000 synthetic loans, the deals CSV),
-built once per test session in a temporary directory. No network, no API key."""
+"""Shared fixtures: one platform over the real data (the deals CSV and FDIC history from saved API responses in
+tests/data/fdic), built once per test session in a temporary directory. No network, no API key, no synthetic data."""
 import copy
+import json
 import os
 import shutil
 import sys
@@ -15,6 +16,29 @@ from neo.config import load_config  # noqa: E402
 from neo.llm.gateway import LLMGateway  # noqa: E402
 from neo.llm.providers import ScriptedLLM  # noqa: E402
 from neo.orchestrator import Neo  # noqa: E402
+
+
+FDIC_CACHE = os.path.join(ROOT, "tests", "data", "fdic")
+# The real data is all public; access tests need fields above a user's clearance, so the tests' copy of the
+# ontology raises two deals fields (the ontology in ontology/source is unchanged).
+TEST_CLASSIFICATION = {"failure_cost_to_fdic_000": "confidential", "acquirer_website": "restricted"}
+
+
+def copy_ontology(dest: str):
+    shutil.copytree(os.path.join(ROOT, "ontology", "source"), dest)
+    path = os.path.join(dest, "deals.json")
+    doc = json.load(open(path))
+    for f in doc["fields"]:
+        if f["name"] in TEST_CLASSIFICATION:
+            f["classification"] = TEST_CLASSIFICATION[f["name"]]
+    json.dump(doc, open(path, "w"), indent=1)
+
+
+def ground(neo) -> dict:
+    """Grounding that marks every block constraint not applicable: for tests about something else."""
+    onto = neo.ontology.load(None, neo.catalog.snapshot())
+    return {"constraints_not_applicable": [{"id": c.id, "why": "not what this test is about"}
+                                           for c in onto.constraints.values() if c.severity == "block"]}
 
 
 def make_cfg(base: str, **over) -> dict:
@@ -32,9 +56,9 @@ def make_cfg(base: str, **over) -> dict:
 def base(tmp_path_factory):
     d = str(tmp_path_factory.mktemp("neo"))
     os.makedirs(f"{d}/ontology")
-    shutil.copytree(os.path.join(ROOT, "ontology", "source"), f"{d}/ontology/source")
+    copy_ontology(f"{d}/ontology/source")
     neo = Neo(make_cfg(d))
-    init_demo(neo, loans=20_000, customers=2_000, offline=True, say=lambda *_: None)
+    init_demo(neo, fdic_cache=FDIC_CACHE, say=lambda *_: None)
     return d
 
 

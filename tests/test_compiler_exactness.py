@@ -11,18 +11,16 @@ from neo.compiler.sql import Compiler
 from neo.execution.interpreter import Interpreter
 from neo.semantic.validator import ValidationContext, validate
 
-LOAN = [
-    "balance_usd * pd * lgd", "balance_usd / 3", "balance_usd / -7", "rate_bp / 10000 - pd * lgd", "pd / lgd",
-    "balance_usd // 1000", "balance_usd % 997", "-balance_usd // 1000", "-balance_usd % 997",
-    "balance_usd if product == 'Card' else -balance_usd", "min(pd, lgd)", "max(pd, lgd)", "abs(pd - lgd)",
-    "product in ['Card', 'Auto']", "not (product in ['Card'])", "contains(product, 'or')",
-    "startswith(lower(product), 'm')", "year_of(origination_date)", "origination_date >= '2015-06-01'",
-    "pd > 0.05 and lgd < 0.4 or status == 'default'", "implies(status == 'default', pd > 0.01)",
-    "coalesce(pd, 0)", "pd / (lgd - 0.3)", "pd / (lgd - 0.3) > 0.1", "ite(pd > 0.1, lgd, pd)",
-    "1 / (rate_bp - 900)", "expected_loss_usd", "is_defaulted", "rate",
+BANK = [
+    "NETINCQ / ASSET", "NETINCQ / 3", "NETINCQ / -7", "NIMQ / 4 - NONIXQ * 0.25", "NETINCQ / EQ",
+    "NETINCQ // 1000", "NETINCQ % 997", "-NETINCQ // 1000", "-NETINCQ % 997",
+    "ASSET if source == 'industry' else -ASSET", "min(NIMQ, NONIXQ)", "max(NIMQ, NONIXQ)", "abs(NETINCQ - ITAXQ)",
+    "source in ['industry', 'bank:628']", "not (source in ['industry'])", "contains(source, 'company')",
+    "startswith(lower(source), 'b')", "year_of(quarter)", "quarter >= '2008-09-30'",
+    "NETINCQ > 0 and ITAXQ < 1000000 or source == 'industry'", "implies(NETINCQ < 0, ITAXQ <= 0)",
+    "coalesce(IGLSECQ, 0)", "NETINCQ / (qtr - 2)", "NETINCQ / (qtr - 2) > 0", "ite(NETINCQ > 0, NIMQ, NONIIQ)",
+    "1 / (BANKS - 1)", "pretax_income", "qtr * 3 - 2",
 ]
-LOAN_JOINED = ["cust.segment == 'SME'", "balance_usd / cust.annual_income_usd", "cust.region_code == booking_region",
-               "reg.region_name"]
 DEAL = [
     "target_assets_pre_deal_000 / 1e6", "target_assets_pre_deal_000 > acquirer_assets_pre_deal_000",
     "target_to_acquirer_asset_ratio * 100", "coalesce(failure_cost_to_fdic_000, 0)", "is_null(failure_date)",
@@ -67,16 +65,9 @@ def compare(neo, entity, expr, joins=()):
     return len(via_sql)
 
 
-@pytest.mark.parametrize("expr", LOAN)
-def test_loan_expressions(neo, expr):
-    assert compare(neo, "loan", expr) == 20_000
-
-
-@pytest.mark.parametrize("expr", LOAN_JOINED)
-def test_joined_expressions(neo, expr):
-    joins = [{"relation": "rel_loan_customer", "as": "cust"},
-             {"relation": "rel_customer_region", "as": "reg", "from": "cust"}]
-    assert compare(neo, "loan", expr, joins) == 20_000
+@pytest.mark.parametrize("expr", BANK)
+def test_bank_history_expressions(neo, expr):
+    assert compare(neo, "bank_quarter", expr) == 510
 
 
 @pytest.mark.parametrize("expr", DEAL)

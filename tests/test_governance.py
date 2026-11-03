@@ -9,34 +9,40 @@ from neo.llm.providers import LLMError, ScriptedLLM
 
 from conftest import direct
 
-CARDS = {"form": "value", "interpretation": "total exposure on cards, in USD", "universe": {"entity": "loan"},
-         "rows": "product == 'Card'", "target": {"columns": {"exposure_usd": "sum(balance_usd)", "n": "count()"}}}
+from conftest import ground
+
+
+def failed(neo) -> dict:
+    return {"form": "value", "interpretation": "number of failed-bank deals and branches transferred",
+            "universe": {"entity": "deal"}, "rows": "is_assisted_failed",
+            "target": {"columns": {"n": "count()", "branches": "sum(branches_transferred)"}}, "grounding": ground(neo)}
 
 
 def test_row_policy_limits_the_answer(neo, scripted):
-    scripted(neo, CARDS, {"verdict": "ok"})
-    r = neo.ask("What is our total exposure on cards?", "ana")
-    (exp, n), = direct(neo, "SELECT SUM(balance_usd), COUNT(*) FROM {loans} WHERE product='Card' AND booking_region='EMEA'")
-    assert r.status == "proved" and r.proof["answer"] == {"exposure_usd": exp, "n": n}
-    assert "Access policy on `loan`" in r.certificate and "EMEA" in r.certificate
-    scripted(neo, CARDS, {"verdict": "ok"})
-    everyone = neo.ask("What is our total exposure on cards?", "demo")
+    scripted(neo, failed(neo), {"verdict": "ok"})
+    r = neo.ask("How many failed-bank deals were there?", "ana")
+    (n,), = direct(neo, "SELECT COUNT(*) FROM {deals} WHERE deal_category = 'Assisted / failed-bank deal' "
+                        "AND target_state = 'TX'")
+    assert r.status == "proved" and r.proof["answer"]["n"] == n > 0
+    assert "Access policy on `deal`" in r.certificate and "TX" in r.certificate
+    scripted(neo, failed(neo), {"verdict": "ok"})
+    everyone = neo.ask("How many failed-bank deals were there?", "demo")
     assert everyone.proof["answer"]["n"] > n
 
 
 def test_briefing_hides_counts_for_restricted_rows_and_hidden_fields(neo, scripted):
-    w = scripted(neo, CARDS, {"verdict": "ok"})
-    neo.ask("What is our total exposure on cards by region?", "ana")
+    w = scripted(neo, failed(neo), {"verdict": "ok"})
+    neo.ask("How many failed-bank deals were there, by deal category?", "ana")
     briefing = w.calls[0]["system"]
-    line = next(l for l in briefing.splitlines() if l.strip().startswith("booking_region"))
-    assert "'EMEA'" in line and "(" not in line.split("values:")[1]   # loan values listed, whole-table counts withheld
-    assert "range" not in next(l for l in briefing.splitlines() if l.strip().startswith("balance_usd"))
-    assert "customer_name" not in briefing and "hidden by your access level" in briefing
+    line = next(l for l in briefing.splitlines() if l.strip().startswith("deal_category"))
+    assert "'Voluntary M&A'" in line and "(" not in line.split("values:")[1]   # values listed, whole-table counts withheld
+    assert "range" not in next(l for l in briefing.splitlines() if l.strip().startswith("target_assets_pre_deal_000"))
+    assert "acquirer_website" not in briefing and "hidden by your access level" in briefing
 
 
 def test_certificate_for_the_llm_has_no_row_data(neo, scripted):
-    scripted(neo, CARDS, {"verdict": "ok"})
-    r = neo.ask("What is our total exposure on cards?", "demo")
+    scripted(neo, failed(neo), {"verdict": "ok"})
+    r = neo.ask("How many failed-bank deals were there?", "demo")
     llm_cert = neo.runs.load_step(r.run_id, "certify")["llm"]
     assert "withheld from the language model" in llm_cert and "```sql" not in llm_cert
     assert "Sample of eligible rows" in r.certificate
@@ -70,9 +76,9 @@ def test_audit_chain_detects_tampering(tmp_path):
 def test_review_routing_and_decision(neo, scripted, monkeypatch):
     from neo.lake.engines import Dialect
     monkeypatch.setattr(Dialect, "count_if", lambda self, cond: "COUNT(*)")
-    scripted(neo, {"form": "value", "interpretation": "number of defaulted loans", "universe": {"entity": "loan"},
-                   "target": {"expr": "count(status == 'default')"}}, {"verdict": "ok"})
-    r = neo.ask("How many loans are in default?", "demo")
+    scripted(neo, {"form": "value", "interpretation": "number of failed-bank deals", "universe": {"entity": "deal"},
+                   "target": {"expr": "count(is_assisted_failed)"}, "grounding": ground(neo)}, {"verdict": "ok"})
+    r = neo.ask("How many failed-bank deals were there?", "demo")
     assert r.status == "mismatch" and any("disagrees" in x for x in r.review_reasons)
     pending = [x for x in neo.runs.reviews("pending") if x["run_id"] == r.run_id]
     assert pending
@@ -83,10 +89,11 @@ def test_review_routing_and_decision(neo, scripted, monkeypatch):
 
 
 def test_access_denial_is_audited(neo, scripted):
-    bad = {"form": "value", "interpretation": "count of customers with a given name",
-           "universe": {"entity": "customer"}, "target": {"expr": "count(customer_name == 'Customer 7')"}}
+    bad = {"form": "value", "interpretation": "count of buyers with a given website",
+           "universe": {"entity": "deal"}, "target": {"expr": "count(acquirer_website == 'www.jpmorganchase.com')"},
+           "grounding": ground(neo)}
     scripted(neo, bad, bad, bad, bad)
-    r = neo.ask("How many customers are named Customer 7?", "demo")
+    r = neo.ask("How many deals were bought by a bank with the website www.jpmorganchase.com?", "demo")
     assert r.status == "no_model" and "restricted" in r.answer
     denials = [json.loads(l) for l in open(neo.cfg["governance"]["audit_log"]) if '"access_denied"' in l]
     assert any(d["data"]["run_id"] == r.run_id for d in denials)
@@ -104,6 +111,6 @@ def test_single_user_deployment(neo):
     p = neo.principal("admin")
     assert p.clearance == "restricted" and not p.row_policies and p.can_approve and p.large_queries
     rep = run_golden(neo, os.path.join(ROOT, "golden", "core.yaml"))
-    assert [s["id"] for s in rep["skipped"]] == ["card_exposure_emea"] and rep["cases"] == 5
+    assert [s["id"] for s in rep["skipped"]] == ["failed_deals_in_state"] and rep["cases"] == 6
     assert {r["run_id"] for r in rep["results"]} and all(neo.runs.run(r["run_id"])["user"] == "admin"
                                                          for r in rep["results"])

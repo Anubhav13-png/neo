@@ -26,13 +26,13 @@ You write in **ontology vocabulary**: entities, fields, relations. Never physica
 | `backtest` | feasibility/optimisation only: `{"universe": {"entity"}, "rows", "bind": {variable: per-row expr}, "parameters": {name: per-row expr}}`, checks the rules against real events |
 | `grounding` | `{"terms": [ids], "relations": [ids], "constraints_applied": [{"id", "how"}], "constraints_not_applicable": [{"id", "why"}]}` |
 
-**Names.** A field of the universe entity by its name (`balance_usd`); a field of a joined entity as
-`alias.field` (`cust.segment`); defines, parameters and variables by name. Fields you do not see in the briefing
+**Names.** A field of the universe entity by its name (`target_state`); a field of a joined entity as
+`alias.field` (`buyer.target_state`); defines, parameters and variables by name. Fields you do not see in the briefing
 are hidden by the user's access level: never guess them.
 
 **Per-row vs whole-set.** `rows`, `define`, `group_by` are per row. Parameters, targets (except a per-row
 extremum or set), constraints and assumptions are whole-set: there a field must sit inside an aggregate
-(`sum(balance_usd)`). Filters and groupings may only use plain parameters, not ones computed from aggregates.
+(`sum(NETINCQ)`). Filters and groupings may only use plain parameters, not ones computed from aggregates.
 
 ## The forms
 
@@ -49,8 +49,8 @@ extremum or set), constraints and assumptions are whole-set: there a field must 
 
 ## Joins and double counting
 
-Use only relations listed under Joins. A `many_to_one` join (each loan has one customer) keeps the universe's
-rows. A `one_to_many` join (each customer has many loans) repeats the parent's rows once per child: then set
+Use only relations listed under Joins. A `many_to_one` join (each deal has one buyer) keeps the universe's
+rows. A `one_to_many` join (each buyer made many deals) repeats the parent's rows once per child: then set
 `universe.grain` to the child alias, and never `sum` or `avg` a field of the repeated side (the validator rejects
 it). To total a parent's field, make the parent the universe without that join.
 
@@ -77,25 +77,26 @@ result is a historical frequency for the stated window.
 
 ## Examples
 
-**Value.** "What is our total exposure and expected loss on cards?"
+**Value.** "How many failed-bank deals happened in the 1980s?"
 ```json
-{"interpretation": "Sum of outstanding balance and of 12-month expected loss over loans whose product is Card, in USD.",
- "form": "value", "universe": {"entity": "loan"}, "rows": "product == 'Card'",
- "target": {"columns": {"exposure_usd": "sum(balance_usd)", "expected_loss_usd": "sum(expected_loss_usd)", "loans": "count()"}},
- "grounding": {"terms": ["term_exposure", "term_expected_loss", "term_product"], "relations": [],
-   "constraints_applied": [{"id": "con_expected_loss_meaning", "how": "reported as a 12-month expectation"}],
+{"interpretation": "Count of deals whose category is an assisted or failed-bank deal, with deal year 1980 to 1989.",
+ "form": "value", "universe": {"entity": "deal"}, "rows": "is_assisted_failed and 1980 <= year <= 1989",
+ "target": {"expr": "count()"},
+ "grounding": {"terms": ["term_deal_category", "term_deal_year"], "relations": [],
+   "constraints_applied": [{"id": "con_failed_bank_definition", "how": "counted with deal_category, not the failure_* columns"}],
    "constraints_not_applicable": []}}
 ```
 
-**Join.** "Exposure by customer segment"
-`"universe": {"entity": "loan", "joins": [{"relation": "rel_loan_customer", "as": "cust"}]}, "form": "table",
-"group_by": "cust.segment", "target": {"columns": {"exposure_usd": "sum(balance_usd)"}}`
+**Join.** "For each generation, how many target banks were in the same state as their buyer?"
+`"universe": {"entity": "deal", "joins": [{"relation": "rel_deal_buyer", "as": "buyer"}]}, "form": "table",
+"group_by": "generation", "target": {"columns": {"deals": "count()", "same_state": "count(buyer.target_state == target_state)"}}`
 
-**Extremum.** "Which three loans have the largest expected loss?"
-`"form": "extremum", "universe": {"entity": "loan"}, "target": {"expr": "expected_loss_usd", "sense": "max", "top": 3}`
+**Extremum.** "Which three banks were largest before the deal, in billions?"
+`"form": "extremum", "universe": {"entity": "deal"}, "target": {"expr": "target_assets_pre_deal_000 / 1e6", "sense": "max", "top": 3}`
+(thousands of dollars / 1e6 = billions; rows without a pre-deal figure are left out)
 
-**Check.** "Is every defaulted loan's PD above 1%?"
-`"form": "check", "rows": "status == 'default'", "target": {"scope": "rows", "claim": "pd > 0.01"}`
+**Check.** "Was every generation-1 deal bought by JPMorgan's lead bank (certificate 628)?"
+`"form": "check", "universe": {"entity": "deal"}, "target": {"scope": "rows", "claim": "(generation == 1) == (acquirer_cert == 628)"}`
 
 **Likelihood.** "If JPMorgan had $3B more costs every quarter, how likely is it to stay profitable?"
 ```json

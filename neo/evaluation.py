@@ -3,11 +3,11 @@
 A golden file lists questions with the expected outcome, owned by domain experts:
 
   cases:
-    - id: card_exposure
-      question: What is our total exposure on cards?
-      user: demo
+    - id: failed_deals_1980s
+      question: How many failed-bank deals happened in the 1980s?
+      user: admin                        # optional: the first user in config/users.yaml
       model: {...}                       # the model a correct LLM would write (used in scripted mode)
-      expect: {status: proved, answer: {exposure_usd: 123}, tolerance: 0}
+      expect: {status: proved, answer: 132, tolerance: 0}
 
 Scripted mode replays each case's model through the full pipeline (retrieval, validation, compilation, proof,
 certificate) without an LLM, so it checks the ontology, data and engine. Live mode asks the configured LLM, so

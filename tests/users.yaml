@@ -7,12 +7,11 @@ roles:
   analyst:
     clearance: internal
     daily_token_budget: 1000000
-  regional_analyst:
+  state_analyst:
     clearance: internal
     daily_token_budget: 1000000
     row_policies:
-      loan: "booking_region == {region}"
-      customer: "region_code == {region}"
+      deal: "target_state == {state}"
   risk_officer:
     clearance: confidential
     approve_reviews: true
@@ -27,9 +26,9 @@ users:
     name: Demo analyst
     roles: [analyst]
   ana:
-    name: Ana Ruiz (EMEA credit analyst)
-    roles: [regional_analyst]
-    attributes: {region: EMEA}
+    name: Ana Ruiz (Texas deals analyst)
+    roles: [state_analyst]
+    attributes: {state: TX}
   raj:
     name: Raj Patel (risk officer)
     roles: [risk_officer]

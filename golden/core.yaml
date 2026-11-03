@@ -1,6 +1,6 @@
 # Golden questions: run `neo eval golden/core.yaml` (scripted: replays each model) or `--live` (asks the LLM).
 # `ontology publish --eval golden/core.yaml` makes a new ontology version current only if every case passes.
-# Answers are pinned only for the deals data (a fixed CSV); other cases check the status and the self-check.
+# Deals answers are pinned (a fixed CSV); FDIC history cases check the status and the self-check.
 # A case without `user` runs as the first user in config/users.yaml.
 cases:
   - id: failed_deals_1980s
@@ -12,8 +12,9 @@ cases:
       rows: "is_assisted_failed and 1980 <= year <= 1989"
       target: {expr: "count()"}
       grounding:
-        terms: [term_assisted_failed_deal, term_deal_year]
-        constraints_applied: [{id: con_failure_detail_coverage, how: "counted with deal_category, not failure_* columns"}]
+        terms: [term_deal_category, term_deal_year]
+        constraints_applied:
+          - {id: con_failed_bank_definition, how: "counted with deal_category, not the failure_* columns"}
     expect: {status: proved, answer: 132, self_check: true}
 
   - id: largest_deals
@@ -24,9 +25,10 @@ cases:
       universe: {entity: deal}
       target: {expr: "target_assets_pre_deal_000 / 1e6", sense: max, top: 3}
       grounding:
+        terms: [term_target_assets_pre_deal]
         constraints_applied:
-          - {id: con_unit_thousands, how: "thousands of dollars divided by 1e6 gives billions"}
-          - {id: con_predeal_coverage, how: "rows without a pre-deal figure are excluded and counted"}
+          - {id: con_units, how: "thousands of dollars divided by 1e6 gives billions"}
+          - {id: con_blank_numeric_sorting, how: "missing values are NULL in the lake and are left out of the ranking"}
     expect: {status: proved, answer: [{value: 307.021614}, {value: 259.527}, {value: 232.944161}], self_check: true}
 
   - id: failed_share_by_decade
@@ -38,39 +40,60 @@ cases:
       group_by: "year // 10 * 10"
       target: {columns: {deals: "count()", failed_share: "share(is_assisted_failed)"}}
       grounding:
-        constraints_applied: [{id: con_failure_detail_coverage, how: "deal_category flag"}]
+        constraints_applied: [{id: con_failed_bank_definition, how: "deal_category flag"}]
     expect: {status: proved, self_check: true}
 
-  - id: card_exposure_emea
-    question: What is our total exposure on cards?
+  - id: same_state_as_buyer
+    question: For each generation, how many target banks were in the same state as the bank that bought them?
+    model:
+      form: table
+      interpretation: Per generation, the number of deals and how many targets share a state with their buyer's own row.
+      universe: {entity: deal, joins: [{relation: rel_deal_buyer, as: buyer}]}
+      group_by: generation
+      target: {columns: {deals: "count()", same_state: "count(buyer.target_state == target_state)"}}
+      grounding:
+        constraints_applied:
+          - {id: con_acquirer_not_jpm, how: "the buyer is each row's own acquirer, not always JPMorgan"}
+          - {id: con_group_by_cert, how: "the buyer is matched by certificate, not by name"}
+    expect: {status: proved, self_check: true}
+
+  - id: failed_deals_in_state
+    question: How many failed-bank deals were there?
     user: ana          # a row-policy case: skipped where user `ana` is not configured (tests/users.yaml defines it)
     model:
       form: value
-      interpretation: Total outstanding balance of card loans visible to the user, in USD.
-      universe: {entity: loan}
-      rows: "product == 'Card'"
-      target: {columns: {exposure_usd: "sum(balance_usd)", loans: "count()"}}
+      interpretation: Count of failed-bank deals among the deals visible to the user.
+      universe: {entity: deal}
+      rows: "is_assisted_failed"
+      target: {expr: "count()"}
+      grounding:
+        constraints_applied: [{id: con_failed_bank_definition, how: "deal_category flag"}]
     expect: {status: proved, self_check: true}
 
-  - id: exposure_by_segment
-    question: What is our exposure by customer segment?
+  - id: jpm_profitable_share
+    question: How often were JPMorgan's insured banks profitable since 2000?
     model:
-      form: table
-      interpretation: Total outstanding balance per customer segment, in USD.
-      universe: {entity: loan, joins: [{relation: rel_loan_customer, as: cust}]}
-      group_by: cust.segment
-      target: {columns: {exposure_usd: "sum(balance_usd)"}}
+      form: value
+      interpretation: Of the quarters since 2000 Q1 for JPMorgan's insured banks, the number and the share with positive pre-tax income. A historical frequency, not a forecast.
+      universe: {entity: bank_quarter, scenario_set: ss_jpm_since_2000}
+      target: {columns: {quarters: "count()", profitable_share: "share(pretax_income > 0)"}}
+      grounding:
+        constraints_applied:
+          - {id: con_scenario_history, how: "approved scenario set of real quarters; reported as a historical frequency"}
     expect: {status: proved, self_check: true}
 
-  - id: rate_cut_break_even
-    question: What is the largest rate cut that keeps every loan's rate above its expected loss rate?
+  - id: cost_jpm_could_absorb
+    question: What is the largest extra quarterly cost JPMorgan could have absorbed in every quarter since 2010?
     model:
       form: optimisation
-      interpretation: The largest uniform cut to every loan's annual rate such that rate minus cut stays at or above PD x LGD for every loan.
-      universe: {entity: loan}
-      variables: [{name: cut, sort: Real, domain: "cut >= -1", unit: ratio}]
-      constraints: [{name: every_loan, expr: "all_rows(rate - cut >= pd * lgd)"}]
-      target: {objective: cut, sense: max}
+      interpretation: The largest extra cost per quarter, scaled by each quarter's assets relative to today, that keeps pre-tax income at or above zero in every quarter since 2010 Q1 for JPMorgan's insured banks.
+      universe: {entity: bank_quarter, scenario_set: ss_jpm_since_2010}
+      parameters: {assets_now_B: {expr: "max_of(ASSET) / 1e6", unit: USD_billions}}
+      variables: [{name: cost_B, sort: Real, domain: "cost_B >= 0", unit: USD_billions}]
+      constraints:
+        - {name: every_quarter, expr: "all_rows(pretax_income / 1e6 - cost_B * (ASSET / 1e6) / assets_now_B >= 0)"}
+      target: {objective: cost_B, sense: max}
       grounding:
-        constraints_applied: [{id: con_expected_loss_meaning, how: "PD x LGD used as a 12-month expected loss rate"}]
+        constraints_applied:
+          - {id: con_scenario_history, how: "real quarters from an approved scenario set; cost scaled by assets"}
     expect: {status: optimal}

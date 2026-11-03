@@ -15,7 +15,7 @@ fields, relations, never physical tables). Code then does everything else:
 The LLM never sees raw data and never computes anything.
 
 ```
-neo ask "What is our total exposure on cards?"
+neo ask "How many failed-bank deals happened in the 1980s?"
 ```
 
 **New here?** [docs/life-of-a-question.html](docs/life-of-a-question.html) walks through every step of a question, in plain words, with a real run as the example (download it and open it in a browser).
@@ -25,16 +25,17 @@ neo ask "What is our total exposure on cards?"
 ```bash
 cd neo
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/pip install -e .
-.venv/bin/neo init                    # lake: deals CSV + FDIC history + 200k synthetic loans; publishes the ontology
-.venv/bin/neo eval golden/core.yaml   # 6 golden questions, scripted (no API key needed)
+.venv/bin/neo init                    # lake: the deals CSV (../jp_morgan.csv) + FDIC history; publishes the ontology
+.venv/bin/neo eval golden/core.yaml   # 7 golden questions, scripted (no API key needed)
 export ANTHROPIC_API_KEY=...          # or set llm.default in config/neo.yaml (Ollama, vLLM, OpenAI-compatible, ...)
 .venv/bin/neo ask "How likely is JPMorgan to stay profitable if costs rise by \$3B a quarter?"
 .venv/bin/neo serve                   # REST API on :8080 (X-User header; put your OIDC gateway in front)
                                       # and the web UI at http://localhost:8080/ (every step of each question)
-.venv/bin/python -m pytest            # 104 tests, offline, ~20 s
+.venv/bin/python -m pytest            # 107 tests on the real data, no network, ~15 s
 ```
 
-`neo init --offline` uses a clearly labelled synthetic bank-history fixture instead of the FDIC API.
+The data is real only: the deals CSV and FDIC quarterly history. `neo init --fdic-cache DIR` reads saved FDIC API
+responses instead of the network (the tests use the ones in `tests/data/fdic`).
 
 ## Architecture
 
@@ -58,7 +59,7 @@ export ANTHROPIC_API_KEY=...          # or set llm.default in config/neo.yaml (O
 |---|---|---|
 | Catalog and snapshots | [neo/lake/catalog.py](neo/lake/catalog.py) | Versioned tables. A `Snapshot` pins one version of every table for a whole question. `LocalLakehouse` keeps immutable Parquet versions, the same idea as Iceberg/Delta. |
 | Query engines | [neo/lake/engines.py](neo/lake/engines.py) | DuckDB locally; `SQLAlchemyEngine` for Trino / Snowflake / Databricks with time travel (`FOR VERSION AS OF`). Dialects for exact integer types and filtered aggregates. |
-| Connectors | [neo/lake/connectors.py](neo/lake/connectors.py) | External data comes in as new table versions (CSV, FDIC, synthetic). Nothing is fetched during a question. |
+| Connectors | [neo/lake/connectors.py](neo/lake/connectors.py) | External data comes in as new table versions (the deals CSV, FDIC history). Nothing is fetched during a question. |
 | Profiles | [neo/lake/profiles.py](neo/lake/profiles.py) | Exact enum values and ranges per table version, cached. Withheld for row-restricted entities. |
 | Ontology model and store | [neo/ontology/model.py](neo/ontology/model.py), [store.py](neo/ontology/store.py) | Terms, entities, fields (physical column or expression, unit, time semantics, classification), join relations with cardinality, constraints, metrics, scenario sets, evidence. Immutable published versions. |
 | Linker and retrieval | [neo/ontology/linker.py](neo/ontology/linker.py), [service.py](neo/ontology/service.py) | Links question words to ontology objects (aliases + TF-IDF). Retrieves only the relevant subgraph, join paths and profiles; asks for clarification if nothing links. |
@@ -99,7 +100,8 @@ Why the result holds for all rows:
 - Infeasibility, or "nothing beyond the optimum", proved on a subset holds for all rows, because a subset only relaxes the constraints.
 - Feasibility and reachability of the optimum are checked on all rows by the lake query.
 
-On the demo lake, the break-even over 200,000 loans converges in 2 rounds with 512 working rows.
+On the FDIC history, the highest return-on-assets floor with at most 10 quarters below it converges in 4 rounds
+when forced past the direct limit (`tests/test_prover.py`).
 
 Every result is also recomputed by the independent path. A deliberately injected compiler bug is caught by this
 check (`tests/test_prover.py::test_a_compiler_bug_is_caught`).
@@ -168,7 +170,7 @@ frequent validator errors, clarifications and negative feedback: that list is th
   - validator, exact compiler, interpreter, prover and refinement
   - certificates, governance checks and audit chain
   - evaluation gate and the orchestrator's checkpointing
-  These are tested by 104 offline tests, every answer against an independent computation.
+  These are tested by 107 tests on the real data, every answer against an independent computation.
 - **Local stand-ins with production interfaces:**
   - DuckDB over Parquet, standing in for the lake
   - a JSON directory, for the ontology store

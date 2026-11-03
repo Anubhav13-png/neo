@@ -12,19 +12,24 @@ from neo.lake import DuckDBEngine, LocalLakehouse
 from neo.ontology.lint import lint
 from neo.ontology.store import JsonDirStore
 
-from conftest import ROOT, script
+from conftest import ROOT, ground, script
 
-CARDS = {"form": "value", "interpretation": "total exposure on cards, in USD", "universe": {"entity": "loan"},
-         "rows": "product == 'Card'", "target": {"expr": "sum(balance_usd)"}}
+Q = "How many branches were transferred in failed-bank deals?"
+
+
+def branches(neo) -> dict:
+    return {"form": "value", "interpretation": "total branches transferred in failed-bank deals",
+            "universe": {"entity": "deal"}, "rows": "is_assisted_failed",
+            "target": {"expr": "sum(branches_transferred)"}, "grounding": ground(neo)}
 
 
 def test_api_end_to_end(neo):
-    script(neo, CARDS, {"verdict": "ok"}, answer="Card exposure is ...")
+    script(neo, branches(neo), {"verdict": "ok"}, answer="Failed-bank deals transferred ...")
     c = TestClient(create_app(neo))
     assert c.get("/health").json()["ok"]
     assert c.post("/questions/sync", json={"question": "x"}).status_code == 422          # no X-User header
     assert c.post("/questions/sync", json={"question": "x"}, headers={"X-User": "mallory"}).status_code == 401
-    r = c.post("/questions/sync", json={"question": "What is our total exposure on cards?"}, headers={"X-User": "demo"})
+    r = c.post("/questions/sync", json={"question": Q}, headers={"X-User": "demo"})
     body = r.json()
     assert r.status_code == 200 and body["status"] == "proved"
     run_id = body["run_id"]
@@ -36,8 +41,8 @@ def test_api_end_to_end(neo):
     assert c.get("/reviews", headers={"X-User": "demo"}).status_code == 403
     assert c.get("/reviews", headers={"X-User": "raj"}).status_code == 200
     assert c.post(f"/runs/{run_id}/replay", json={}, headers={"X-User": "demo"}).json()["same_answer"]
-    hits = c.get("/ontology/search", params={"q": "probability of default"}, headers={"X-User": "demo"}).json()
-    assert hits[0]["id"] in ("term_pd", "fld_loan_pd")
+    hits = c.get("/ontology/search", params={"q": "target assets before the deal"}, headers={"X-User": "demo"}).json()
+    assert hits[0]["id"] in ("term_target_assets_pre_deal", "fld_deal_target_assets_pre_deal_000")
     job = c.post("/questions", json={"question": "anything"}, headers={"X-User": "demo"}).json()["job_id"]
     assert c.get(f"/jobs/{job}", headers={"X-User": "demo"}).json()["status"] == "queued"
 
@@ -48,8 +53,7 @@ def test_web_ui_explains_every_step(neo):
     ana = {"X-User": "ana"}
     assert "question explorer" in c.get("/").text
     assert {u["id"] for u in c.get("/ui/config").json()["users"]} >= {"demo", "ana"}
-    run_id = c.post("/ui/ask", json={"question": "What is our total exposure on cards?", "model": CARDS},
-                    headers=ana).json()["run_id"]
+    run_id = c.post("/ui/ask", json={"question": Q, "model": branches(neo)}, headers=ana).json()["run_id"]
     for _ in range(100):
         d = c.get(f"/ui/runs/{run_id}/explain", headers=ana).json()
         if d["finished"]:
@@ -57,17 +61,17 @@ def test_web_ui_explains_every_step(neo):
         time.sleep(0.1)
     assert d["run"]["status"] == "proved" and d["proof"]["self_check"]["matches"]
     math = " ".join(m["html"] for m in d["math"])
-    assert "Σ" in math and "booking_region" in math                       # the sum, and ana's row policy
+    assert "Σ" in math and "target_state" in math                         # the sum, and ana's row policy
     cols = {col["name"]: col for col in d["columns"]}
-    assert cols["balance_usd"]["column"] == "balance_usd" and cols["balance_usd"]["unit"] == "USD"
-    assert "access policy" in cols["booking_region"]["used_in"] and d["queries"] and d["certify"]["llm"]
+    assert cols["branches_transferred"]["column"] == "branches_transferred" and cols["branches_transferred"]["unit"] == "count"
+    assert "access policy" in cols["target_state"]["used_in"] and d["queries"] and d["certify"]["llm"]
     assert c.get(f"/ui/runs/{run_id}/explain", headers={"X-User": "demo"}).status_code == 404
     ents = {e["id"]: e for e in c.get("/ui/ontology", headers=ana).json()["entities"]}
-    assert ents["loan"]["rows"] is None and ents["loan"]["row_policy"]     # no whole-table count under a policy
+    assert ents["deal"]["rows"] is None and ents["deal"]["row_policy"]     # no whole-table count under a policy
     o = c.get("/ui/ontology/overview", headers=ana).json()
     assert o["counts"]["entities"] == len(o["entities"]) and o["hidden_fields"] > 0 and o["health"]
-    t = c.get("/ui/ontology/trace", params={"q": "exposure on cards"}, headers=ana).json()
-    assert any(f["column"] == "balance_usd" for l in t["links"] for f in l["fields"])
+    t = c.get("/ui/ontology/trace", params={"q": "target assets before the deal"}, headers=ana).json()
+    assert any(f["column"] == "target_assets_pre_deal_000" for l in t["links"] for f in l["fields"])
 
 
 def test_snapshot_pinning(tmp_path):
@@ -87,10 +91,10 @@ def test_lint_checks_mappings_against_the_lake(neo):
     doc = json.loads(json.dumps(neo.store.source_document()))
     errors, _ = lint(doc, neo.catalog, neo.catalog.snapshot())
     assert not errors
-    doc["fields"].append({"id": "fld_bad", "entity": "loan", "name": "ghost", "column": "no_such_column", "unit": "USD"})
-    doc["fields"].append({"id": "fld_bad2", "entity": "loan", "name": "net", "column": "balance_usd", "unit": "dollars"})
-    doc["relations"].append({"id": "rel_bad", "kind": "join", "from_entity": "loan", "to_entity": "customer",
-                             "on": [["customer_id", "nope"]], "cardinality": "many_to_one"})
+    doc["fields"].append({"id": "fld_bad", "entity": "deal", "name": "ghost", "column": "no_such_column", "unit": "USD"})
+    doc["fields"].append({"id": "fld_bad2", "entity": "bank_quarter", "name": "net", "column": "NETINCQ", "unit": "dollars"})
+    doc["relations"].append({"id": "rel_bad", "kind": "join", "from_entity": "deal", "to_entity": "bank_quarter",
+                             "on": [["target_cert", "nope"]], "cardinality": "many_to_one"})
     e = " | ".join(lint(doc, neo.catalog, neo.catalog.snapshot())[0])
     assert "no_such_column" in e and "unknown unit `dollars`" in e and "join keys" in e
 

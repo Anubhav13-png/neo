@@ -155,15 +155,15 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
 <header class="intro">
   <span class="label">neo · question pipeline</span>
   <h1>Life of a question</h1>
-  <p class="lede">Everything that happens between pressing <b>Ask</b> and reading the answer, step by step, in plain words. The example throughout is a real run on your data: <i>“What is our total exposure on cards?”</i>, asked as Admin.</p>
+  <p class="lede">Everything that happens between pressing <b>Ask</b> and reading the answer, step by step, in plain words. The example throughout is a real run on your data: <i>“How many failed-bank deals happened in the 1980s?”</i>, asked as Admin.</p>
 </header>
 
 <div class="glance" aria-label="The example run at a glance">
-  <div><b>$125,974,233,615</b><span>total card exposure</span></div>
-  <div><b>50,209</b><span>card loans, of 200,000 loans</span></div>
+  <div><b>132</b><span>failed-bank deals in the 1980s</span></div>
+  <div><b>955</b><span>deals in jp_morgan.csv</span></div>
   <div><b>Proved</b><span>Z3, then Lean re-checked it</span></div>
   <div><b>Matched</b><span>independent recomputation</span></div>
-  <div><b>6.2 s</b><span>from Ask to answer</span></div>
+  <div><b>2.0 s</b><span>from Ask to answer</span></div>
 </div>
 
 <section class="idea" aria-labelledby="idea-h">
@@ -172,7 +172,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <div class="workers">
     <div class="worker"><span class="chip c-code">Code</span><p>neo's own program. The same input always gives the same output.</p></div>
     <div class="worker"><span class="chip c-llm">LLM</span><p>Claude. Writes the model, reviews it, writes the final text. Never sees data rows.</p></div>
-    <div class="worker"><span class="chip c-lake">Data lake</span><p>DuckDB over a frozen copy of your tables. Every number is calculated here.</p></div>
+    <div class="worker"><span class="chip c-lake">Data lake</span><p>DuckDB over a frozen copy of your two tables: the deals CSV and FDIC history. Every number is calculated here.</p></div>
     <div class="worker"><span class="chip c-z3">Z3</span><p>A solver. Proves an answer is the only possible one, finds best values and clashes.</p></div>
     <div class="worker"><span class="chip c-lean">Lean</span><p>A proof checker with a small trusted core. Re-checks what Z3 decided.</p></div>
   </div>
@@ -273,9 +273,9 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <li><b>Starts the record.</b> It creates a run id and writes “question asked” to the audit log.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <table><tr><td>Run</td><td class="mono">run_20261103112042_e63a705a</td></tr>
-    <tr><td>Data snapshot</td><td class="mono">snap_9be31d0acc6bdc9e</td></tr>
-    <tr><td>Ontology version</td><td class="mono">v0001-117ad810</td></tr></table>
+    <table><tr><td>Run</td><td class="mono">run_20261103191750_8edc80a0</td></tr>
+    <tr><td>Data snapshot</td><td class="mono">snap_4a1cb2ceb8871c88</td></tr>
+    <tr><td>Ontology version</td><td class="mono">v0002-0b6222eb</td></tr></table>
   </div>
   <p class="note">Why it matters: replaying this run next year gives the same answer, because every later step reloads exactly this snapshot and this ontology version.</p>
   <p class="saved">Saved: the run record and <code>var/audit.jsonl</code>.</p>
@@ -285,7 +285,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <div class="step-head"><span class="num">2</span><h3>Link your words to the ontology</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">neo looks up the words of your question in the ontology, the company's dictionary of what the data means.</p>
   <ul>
-    <li><b>Splits the question into words.</b> Lowercase, punctuation removed, simple plurals reduced (“cards” becomes “card”).</li>
+    <li><b>Splits the question into words.</b> Lowercase, punctuation removed, simple plurals reduced (“deals” becomes “deal”).</li>
     <li><b>Exact phrases.</b> Every run of 1 to 6 words is compared with the names and aliases of terms, tables, columns, metrics and history windows. Longer matches score higher: 0.6 plus 0.15 per word, up to 1.0.</li>
     <li><b>Similar wording.</b> The question is also compared with each object's description, so different wording still finds the right thing. These matches score lower and are kept only above a threshold.</li>
     <li><b>Unknown words</b> are saved as suggestions for new aliases.</li>
@@ -293,12 +293,14 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <div class="ex"><span class="label">In the example</span>
     <div class="scroll"><table>
       <tr><th>Your words</th><th>Ontology object</th><th>Kind</th><th class="r">Score</th></tr>
-      <tr><td>“total exposure”</td><td class="mono">met_total_exposure</td><td>approved metric</td><td class="r">0.90</td></tr>
-      <tr><td>“exposure”</td><td class="mono">term_exposure</td><td>business term</td><td class="r">0.75</td></tr>
-      <tr><td>“exposure”</td><td class="mono">balance_usd</td><td>column (via the term)</td><td class="r">0.75</td></tr>
-      <tr><td>“cards”</td><td class="mono">term_product</td><td>business term</td><td class="r">0.75</td></tr>
-      <tr><td>“cards”</td><td class="mono">product</td><td>column</td><td class="r">0.75</td></tr>
+      <tr><td>“failed bank”</td><td class="mono">term_failed_bank_deal</td><td>business term</td><td class="r">0.90</td></tr>
+      <tr><td>“deals”</td><td class="mono">deal</td><td>entity (table)</td><td class="r">0.75</td></tr>
+      <tr><td>“deal”</td><td class="mono">term_acquired_bank</td><td>business term (alias)</td><td class="r">0.75</td></tr>
+      <tr><td>“bank”</td><td class="mono">BANKS</td><td>column of the FDIC history</td><td class="r">0.75</td></tr>
+      <tr><td>similar wording</td><td class="mono">is_assisted_failed</td><td>column (a formula)</td><td class="r">0.56</td></tr>
+      <tr><td>similar wording</td><td class="mono">term_deal_category</td><td>business term</td><td class="r">0.37</td></tr>
     </table></div>
+    <p>“bank” also matched a column of the FDIC history. That is fine: in the next step the deals table wins the vote. “happened” matched nothing and was saved as an alias suggestion.</p>
   </div>
   <p class="note warn">If nothing matches, neo stops here and asks which table you mean (status <code>needs_clarification</code>). The LLM is never asked to guess.</p>
   <p class="saved">Saved: <code>steps/retrieve.json</code>.</p>
@@ -314,14 +316,15 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <li><b>Writes it as text.</b> This briefing is everything the LLM learns about your data. It contains no data rows.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <p>Main table <code>loan</code>, with <code>customer</code> as a related table. 0 columns hidden. 3 metrics, 4 constraints. An excerpt of what the LLM reads:</p>
-<pre>- entity `loan`: Loan. One row per loan; key `loan_id`; time field origination_date.
-    product [term_product]: text | values: 'Card'; 'Mortgage'; 'Commercial'; 'Auto'
-    balance_usd [term_exposure]: number, USD, level at a point in time — outstanding balance
-## Approved metrics (prefer these formulas)
-- met_total_exposure (loan): Total exposure = `sum(balance_usd)` [USD]
+    <p>Main table <code>deal</code> (the FDIC history lost the vote). 0 columns hidden. 7 constraints from your ontology. An excerpt of what the LLM reads:</p>
+<pre>- entity `deal`: Deal (bank that ended up in JPMorgan Chase). One row per target bank; key `target_cert`;
+  time field effective_date. 955 banks that ended up inside JPMorgan Chase, 1970-2023 (FDIC BankFind).
+    year [term_deal_year]: number, years | bigint, filled 100%, range 1970 to 2023
+    deal_category [term_deal_category]: text | values: 'Voluntary M&amp;A' (717); 'Assisted / failed-bank deal' (238)
+    is_assisted_failed: bool = deal_category == 'Assisted / failed-bank deal'
 ## Constraints (`block` ones must be addressed in grounding when they apply)
-- con_expected_loss_meaning [block] on term_expected_loss: ... | triggers: expected loss, credit loss</pre>
+- con_failed_bank_definition [block, enum_semantics] on term_failed_bank_deal: Failed-bank / FDIC-assisted
+  deals are the 238 rows with deal category 'Assisted / failed-bank deal' ...</pre>
   </div>
   <p class="saved">Saved: the briefing text, in <code>steps/retrieve.json</code>.</p>
 </section>
@@ -340,11 +343,14 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   </ul>
   <div class="ex"><span class="label">In the example</span>
 <pre>{ "form": "value",
-  "interpretation": "Total outstanding balance of card loans, in USD, and how many card loans there are.",
-  "universe": {"entity": "loan"},
-  "rows": "product == 'Card'",
-  "target": {"columns": {"exposure_usd": "sum(balance_usd)", "loans": "count()"}} }</pre>
-    <p>In plain words: take the loan table, keep the rows where product is Card, and report the total of <code>balance_usd</code> and the number of rows. <code>'Card'</code> is copied from the category values in the briefing, not guessed.</p>
+  "interpretation": "Count of deals that were assisted or failed-bank deals with year 1980 to 1989.",
+  "universe": {"entity": "deal"},
+  "rows": "is_assisted_failed and 1980 &lt;= year &lt;= 1989",
+  "target": {"expr": "count()"},
+  "grounding": {"terms": ["term_deal_category", "term_deal_year"],
+    "constraints_applied": [{"id": "con_failed_bank_definition",
+                             "how": "counted with deal_category, not the failure_* columns"}]} }</pre>
+    <p>In plain words: take the deals table, keep the rows that are failed-bank deals with a year from 1980 to 1989, and count them. <code>is_assisted_failed</code> is a formula in the ontology (<code>deal_category == 'Assisted / failed-bank deal'</code>), so the model never types the category text itself.</p>
   </div>
   <p class="saved">Saved: <code>attempts/attempt_1.json</code>, and the LLM call in the call log.</p>
 </section>
@@ -354,7 +360,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <p class="one">Before any query runs, neo checks the model against the ontology and the user's rights, and collects every problem, not just the first.</p>
   <div class="scroll"><table>
     <tr><th>Check</th><th>What it stops</th></tr>
-    <tr><td>Real names</td><td>A table, column or join that does not exist (“did you mean <code>balance_usd</code>?”)</td></tr>
+    <tr><td>Real names</td><td>A table, column or join that does not exist (“did you mean <code>branches_transferred</code>?”)</td></tr>
     <tr><td>Access</td><td>Using a column or table above the user's clearance</td></tr>
     <tr><td>Units</td><td>Adding thousands to dollars, or a percent to a ratio, without converting</td></tr>
     <tr><td>Time</td><td>Adding a balance (a level on a date) to an amount over a period; using a year-to-date figure as one month</td></tr>
@@ -365,7 +371,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <tr><td>Size</td><td>Scanning over 50 million rows without permission for large queries (Admin has it)</td></tr>
   </table></div>
   <div class="ex"><span class="label">In the example</span>
-    <p>Passed on the first attempt. No enforced constraint applied: the question does not say “expected loss”, and the model does not read PD.</p>
+    <p>Passed on the first attempt. One enforced rule from your ontology applied: <code>con_failed_bank_definition</code>, because the question says “failed bank”. The model marked it applied (“counted with deal_category, not the failure_* columns”). Without that line, the model would have been sent back.</p>
   </div>
   <p class="note warn"><b>If it fails:</b> the full list of errors goes back to Claude with “The model was rejected. Fix every problem below.” Claude gets up to 3 fixes (4 attempts in all). Problems found while compiling or proving (steps 6 to 8) go back the same way. If it still fails, the status is <code>no_model</code> and you see the last problems. No answer is invented.</p>
 </section>
@@ -385,11 +391,11 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <li><b>Joins</b> come from ontology relations, and any row limits go into every <code>WHERE</code>.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-<pre>SELECT SUM(CAST(t0."balance_usd" AS HUGEINT)),                       -- the total, as a whole number
-       COUNT(*) FILTER (WHERE CAST(t0."balance_usd" AS HUGEINT) IS NULL), -- missing balances
-       COUNT(*)                                                       -- the number of loans
-FROM s_9be31d0acc6bdc9e."loans" t0                                    -- the frozen snapshot
-WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
+<pre>SELECT COUNT(*)                                                   -- the number of deals
+FROM s_4a1cb2ceb8871c88."deals" t0                                -- the frozen snapshot
+WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted_failed, from the ontology
+           AND 1980 - t0."year" &lt;= 0                             -- 1980 &lt;= year, written as a difference
+           AND t0."year" - 1989 &lt;= 0, FALSE)                     -- year &lt;= 1989</pre>
   </div>
 </section>
 
@@ -403,11 +409,9 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
   </ul>
   <div class="ex"><span class="label">In the example</span>
     <table>
-      <tr><td>Loans visible to Admin</td><td class="r">200,000</td></tr>
-      <tr><td>Card loans (eligible rows)</td><td class="r">50,209</td></tr>
-      <tr><td>Σ balance_usd</td><td class="r mono">125,974,233,615</td></tr>
-      <tr><td>Missing balances</td><td class="r">0</td></tr>
-      <tr><td>Time per query</td><td class="r">about 2 ms</td></tr>
+      <tr><td>Deals visible to Admin</td><td class="r">955</td></tr>
+      <tr><td>Failed-bank deals, 1980–1989 (eligible rows)</td><td class="r">132</td></tr>
+      <tr><td>Time per query</td><td class="r">about 1 ms</td></tr>
     </table>
   </div>
   <p class="saved">Saved: every query with its purpose, time and row count, in <code>proof.json</code>.</p>
@@ -421,23 +425,21 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
     <li><b>A table:</b> each cell is proved the same way.</li>
     <li><b>Top or bottom:</b> for each rank, a query counts the rows strictly better. The count must match the candidates, so nothing outside the ranking beats it.</li>
     <li><b>A yes/no claim about rows:</b> a query searches every row for one that breaks the claim. None found means it holds on this snapshot.</li>
-    <li><b>Questions with unknowns</b> (“what is the best value?”, “is this possible?”): Z3 solves for the unknowns. Above 5,000 rows it uses refinement, shown in the box below.</li>
+    <li><b>Questions with unknowns</b> (“what is the best value?”, “is this possible?”): Z3 solves for the unknowns, with one rule per row. Up to 5,000 rows it sees every row at once; above that it works in rounds (refinement). Your tables have 955 and 510 rows, so Z3 always sees every row.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-<pre>(declare-fun ans () Real)                      ; an unknown called ans
-(assert (= ans (to_real 125974233615)))        ; ans equals the lake's total
-(assert (distinct (to_real 125974233615) ans)) ; ...and ans is something else?
+<pre>(declare-fun ans () Real)            ; an unknown called ans
+(assert (= ans (to_real 132)))       ; ans equals the lake's count
+(assert (distinct (to_real 132) ans)) ; ...and ans is something else?
 → unsat: no other value is possible</pre>
-    <p>The same check proves the count, 50,209.</p>
   </div>
-  <div class="ex"><span class="label">A question with an unknown: the rate cut</span>
-    <p><i>“What is the largest uniform rate cut that keeps every loan's rate at or above its expected loss rate?”</i> That means one rule per loan, 200,000 rules, too many to give Z3 at once. So neo works in rounds:</p>
+  <div class="ex"><span class="label">A question with an unknown: the cost JPMorgan could absorb</span>
+    <p><i>“What is the largest extra quarterly cost JPMorgan could have absorbed in every quarter since 2010?”</i> The model uses the approved history window <code>ss_jpm_since_2010</code> (66 real quarters from the FDIC data) and one unknown, <code>cost_B</code>. Each quarter gives Z3 one rule: pre-tax income minus the cost (scaled by that quarter's assets against today's $4.09 trillion) must stay at or above zero.</p>
     <div class="scroll"><table>
-      <tr><th>Round</th><th class="r">Loans Z3 saw</th><th class="r">Z3's best cut</th><th class="r">Loans in the lake that break it</th><th>Then</th></tr>
-      <tr><td>1</td><td class="r">256</td><td class="r mono">−0.073351</td><td class="r">523</td><td>add 256 of them</td></tr>
-      <tr><td>2</td><td class="r">512</td><td class="r mono">−0.100547</td><td class="r">0</td><td>done</td></tr>
+      <tr><th class="r">Quarters Z3 saw</th><th class="r">Best cost per quarter</th><th>Deciding quarter</th><th class="r">Quarters that break it</th></tr>
+      <tr><td class="r">66</td><td class="r mono">$2.968165 billion</td><td>Q1 2020: $1.95B pre-tax on $2.69T assets</td><td class="r">0</td></tr>
     </table></div>
-    <p>Two final proofs follow: no larger cut satisfies the rules (unsat), and −0.100547 is actually reachable. Using fewer loans can only make the rules looser, so a best value that also passes every loan in the lake is the true best value.</p>
+    <p>Two final proofs follow: no larger cost satisfies every quarter (unsat), and $2.968165 billion is actually reachable. The exact answer is the fraction 81548095599633 / 27474250000000, never rounded inside the proof.</p>
   </div>
 </section>
 
@@ -451,8 +453,8 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
     <li><b>General theorems</b> in <code>lean/Neo</code>, proved once for all runs (21 of them), explain why a result checked on some rows holds for every row.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <p>1 theorem with 2 facts: 125,974,233,615 and 50,209 are exactly what the lake's totals give. <span class="chip ok">checked</span> in 5.2 s. It relies on the library theorems <code>unique_of_unsat</code>, <code>sum_const_den</code> and <code>cmp_sign</code>.</p>
-    <p>For the rate cut, Lean checked 22 theorems with 515 facts. The key one says: for every possible cut, the one deciding loan (0.0163 − cut ≥ 0.11685) forces the cut to be at most −0.100547.</p>
+    <p>1 theorem: 132 is exactly what the lake's count gives. <span class="chip ok">checked</span> in 2.0 s. It relies on the library theorems <code>unique_of_unsat</code>, <code>sum_const_den</code> and <code>cmp_sign</code>.</p>
+    <p>For the cost question, Lean checked 4 theorems with 69 facts: the optimum satisfies all 66 quarters, and the key one says that for every possible cost, the Q1 2020 quarter alone forces it to be at most $2.968165 billion.</p>
   </div>
   <p class="note">If Lean is not installed, or <code>lean.enabled</code> is off, this step is skipped and the certificate does not mention it.</p>
 </section>
@@ -465,7 +467,7 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
     <li><b>Above that:</b> a separate floating-point SQL version is used. It is approximate, and the certificate says so.</li>
     <li><b>If they disagree,</b> the status becomes <code>mismatch</code>: the answer is marked NOT proved and sent to human review.</li>
   </ul>
-  <div class="ex"><span class="label">In the example</span><p>Exact recomputation over 50,209 rows. <span class="chip ok">matched</span></p></div>
+  <div class="ex"><span class="label">In the example</span><p>Exact recomputation over the 955 deals. <span class="chip ok">matched</span></p></div>
 </section>
 
 <!-- ======================= EXPLAIN AND DELIVER ======================= -->
@@ -549,7 +551,7 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
     <li><b>Replay on today's data:</b> the same model on the latest data and ontology.</li>
     <li><b>Feedback:</b> a thumbs up or down with a comment, stored with the run.</li>
   </ul>
-  <div class="ex"><span class="label">In the example</span><p>Total time 6.2 s, about 5 s of it Lean starting up. Open it in the UI's Ask tab: <code>run_20261103112042_e63a705a</code>.</p></div>
+  <div class="ex"><span class="label">In the example</span><p>Total time 2.0 s, most of it the Lean check. Open it in the UI's Ask tab: <code>run_20261103191750_8edc80a0</code>.</p></div>
 </section>
 
 <!-- ======================= REFERENCE ======================= -->
@@ -576,8 +578,8 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
   <div class="phase"><span class="label">Reference</span><h2>Words used here</h2></div>
   <dl>
     <dt>Ontology</dt><dd>The company's dictionary of its data: what each table and column means, in which unit, and which rules apply.</dd>
-    <dt>Term</dt><dd>A business word with a definition, such as exposure or PD. Columns are linked to terms.</dd>
-    <dt>Entity</dt><dd>A kind of thing with its own table: a loan, a customer, a deal.</dd>
+    <dt>Term</dt><dd>A business word with a definition, such as failed-bank deal or deal year. Columns are linked to terms.</dd>
+    <dt>Entity</dt><dd>A kind of thing with its own table: a deal (jp_morgan.csv) or a bank quarter (FDIC history).</dd>
     <dt>Constraint</dt><dd>A business rule in the ontology. “Block” rules must be addressed by the model; “info” rules are background.</dd>
     <dt>Snapshot</dt><dd>A frozen version of every table, so a run always reads the same data.</dd>
     <dt>Briefing</dt><dd>The short extract of the ontology the LLM reads for one question. It has no data rows.</dd>
@@ -595,7 +597,7 @@ WHERE COALESCE(t0."product" = 'Card', FALSE)</pre>
 </main>
 </div>
 
-<footer>Numbers on this page come from run <code>run_20261103112042_e63a705a</code> (cards) and the rate-cut run on the same 200,000-loan snapshot, both on ontology version v0001-117ad810.</footer>
+<footer>Numbers on this page come from runs <code>run_20261103191750_8edc80a0</code> (failed-bank deals) and <code>run_20261103191752_5050eb2a</code> (the cost question) on snapshot <code>snap_4a1cb2ceb8871c88</code> and ontology version v0002-0b6222eb. The data is real only: jp_morgan.csv and FDIC quarterly history.</footer>
 </div>
 
 <script>
