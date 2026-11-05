@@ -85,7 +85,8 @@ def supplied(neo: Neo, model: dict) -> Neo:
     writer = ScriptedLLM(responses=[model, {"verdict": "ok", "note": "supplied model: no LLM review"}])
     note = "Supplied model: no language model was called, so there is no prose answer. The proved result is above."
     clone.gateway = LLMGateway(neo.cfg, neo.runs, providers={
-        "default": writer, "formalize": writer, "review": writer, "answer": ScriptedLLM(responses=[note])})
+        "default": writer, "formalize": writer, "review": writer, "answer": ScriptedLLM(responses=[note]),
+        "requirements": ScriptedLLM(responses=[{"requirements": []}])})
     return clone
 
 

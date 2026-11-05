@@ -1,6 +1,6 @@
 """neo command line.
 
-  neo init [--deals-csv PATH] [--fdic-cache DIR]   load the deals CSV and FDIC history, publish the ontology
+  neo init [--deals-csv PATH]               load the deals CSV (955 rows), publish the ontology
   neo ask "question" [--user ID]            answer with a proof certificate (default: the first user in
                                             config/users.yaml)
   neo submit "question" [--user ID]         queue it; `neo worker` runs queued questions
@@ -8,7 +8,7 @@
   neo review list | approve RUN | reject RUN --user raj
   neo feedback RUN --rating -1 --comment "..." --user demo
   neo ontology lint | publish [--eval golden/core.yaml] | versions | search "words" | briefing "question"
-  neo ingest csv TABLE PATH | fdic SOURCE...
+  neo ingest csv TABLE PATH
   neo eval golden/core.yaml [--live]
   neo lean build | status                   build and audit the Lean theorem library (lean/Neo)
   neo curation | audit | stats | serve [--port 8080 --workers 2]
@@ -40,7 +40,6 @@ def main(argv=None):
 
     s = sub.add_parser("init")
     s.add_argument("--deals-csv", default=None, help="default: jp_morgan.csv next to the project folder")
-    s.add_argument("--fdic-cache", default=None, help="saved FDIC API responses (default: the lake's cache)")
 
     s = sub.add_parser("ask")
     s.add_argument("question", nargs="+")
@@ -88,7 +87,7 @@ def main(argv=None):
     s.add_argument("--user", default=None)
 
     s = sub.add_parser("ingest")
-    s.add_argument("kind", choices=["csv", "fdic"])
+    s.add_argument("kind", choices=["csv"])
     s.add_argument("args", nargs="*")
 
     s = sub.add_parser("lean")
@@ -114,7 +113,7 @@ def main(argv=None):
 
     if a.cmd == "init":
         from .bootstrap import init_demo
-        init_demo(neo, deals_csv=a.deals_csv, fdic_cache=a.fdic_cache)
+        init_demo(neo, deals_csv=a.deals_csv)
     elif a.cmd == "ask":
         r = neo.ask(" ".join(a.question), a.user)
         if a.json:
@@ -201,11 +200,7 @@ def main(argv=None):
     elif a.cmd == "ingest":
         from .lake import connectors
         con = neo.engine.connection
-        if a.kind == "csv":
-            print(connectors.ingest_csv(neo.catalog, con, a.args[0], a.args[1]))
-        else:
-            from .bootstrap import FDIC_SOURCES
-            print(connectors.ingest_fdic(neo.catalog, con, a.args or FDIC_SOURCES))
+        print(connectors.ingest_csv(neo.catalog, con, a.args[0], a.args[1]))
     elif a.cmd == "eval":
         from .evaluation import run_golden
         rep = run_golden(neo, a.path, live=a.live)

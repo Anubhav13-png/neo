@@ -15,6 +15,9 @@ This folder holds the general theorems: facts about neo's *methods*, proved once
 | `Neo/Extremum.lean` | equal "rows strictly better" counts mean every better row is a candidate | `form: extremum` |
 | `Neo/Counterexample.lean` | a zero `NOT COALESCE(claim, TRUE)` count means no row is a counterexample (SQL's three-valued logic) | `form: check` over rows |
 | `Neo/Clash.lean` | a constraint whose removal makes the rest satisfiable is in every clashing set | infeasible probes ("routes that open") |
+| `Neo/Rounding.lean` | `s − u/2 ≤ v ≤ s + u/2` is an honest rounding of the exact value; it survives shifts, negation and equal values; two honest roundings differ by at most one unit | numbers in answers (answer check) |
+| `Neo/Compose.lean` | proved parts give the combined value; a comparison decided on the proved values holds for the parts | `form: plan` |
+| `Neo/Fidelity.lean` | model → requirement for every row means every kept row meets it; so does a zero lake count of kept rows that break it; an equivalent filter selects the same rows and gives the same aggregate; a stricter filter keeps no more rows | fidelity check |
 
 ## Setup
 

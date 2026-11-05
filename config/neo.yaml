@@ -27,6 +27,7 @@ llm:
     model: claude-opus-5-5
     max_tokens: 16000
   tasks:                      # route each step to a model; omitted tasks use `default`
+    requirements: default     # lists what the question needs; never sees the model (omit to skip the fidelity check)
     formalize: default
     review: default
     answer: {provider: anthropic, model: claude-sonnet-5-5, max_tokens: 4000}
@@ -35,6 +36,9 @@ llm:
 pipeline:
   max_repairs: 3              # times the LLM may fix a model the validator or prover rejected
   review: true                # LLM re-reads its model and the result, may correct it once
+  requirements: true          # a second LLM lists what the question needs; the fidelity check proves the model meets it
+  answer_check: true          # every claim in the written answer is checked; failures go back to the writer
+  answer_repairs: 2           # times the answer writer may fix claims that failed the check
   solver_timeout_seconds: 60
 
 verification:

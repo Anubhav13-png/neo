@@ -7,7 +7,8 @@ A golden file lists questions with the expected outcome, owned by domain experts
       question: How many failed-bank deals happened in the 1980s?
       user: admin                        # optional: the first user in config/users.yaml
       model: {...}                       # the model a correct LLM would write (used in scripted mode)
-      expect: {status: proved, answer: 132, tolerance: 0}
+      requirements: [...]               # optional: what the requirements writer would list (scripted mode)
+      expect: {status: proved, answer: 132, tolerance: 0, fidelity: matched}
 
 Scripted mode replays each case's model through the full pipeline (retrieval, validation, compilation, proof,
 certificate) without an LLM, so it checks the ontology, data and engine. Live mode asks the configured LLM, so
@@ -56,6 +57,7 @@ def run_golden(neo, path: str, live: bool = False, ontology_version: Optional[st
                 writer = ScriptedLLM(responses=[case["model"], {"verdict": "ok"}])
                 neo.gateway = LLMGateway(neo.cfg, neo.runs, providers={
                     "default": writer, "formalize": writer, "review": writer,
+                    "requirements": ScriptedLLM(responses=[{"requirements": case.get("requirements") or []}]),
                     "answer": ScriptedLLM(responses=["(scripted evaluation: no answer text)"])})
             r = neo.ask(case["question"], user, ontology_version=ontology_version)
             exp = case.get("expect", {})
@@ -71,6 +73,10 @@ def run_golden(neo, path: str, live: bool = False, ontology_version: Optional[st
             if exp.get("self_check") and (r.proof or {}).get("self_check", {}).get("matches") is not True:
                 ok = False
                 why.append("self-check did not match")
+            fid = ((r.proof or {}).get("fidelity") or {}).get("status")
+            if exp.get("fidelity") and not live and fid != exp["fidelity"]:
+                ok = False
+                why.append(f"fidelity {fid}, expected {exp['fidelity']}")
             results.append({"id": case["id"], "passed": ok, "status": r.status, "run_id": r.run_id,
                             "reason": "; ".join(why)})
     finally:

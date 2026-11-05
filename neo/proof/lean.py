@@ -54,6 +54,13 @@ LIBRARY = {
     "optimal_min": [("Neo.Refinement.bound_of_core", "the bound from the core rows holds on the working rows"),
                     ("Neo.Refinement.minimal_of_subset",
                      "bounded on the working rows + attained on every row = the minimum over every row")],
+    "combine": [("Neo.Compose.combine_value", "a value computed from the parts' proved values is the parts' value"),
+                ("Neo.Compose.compare_of_eq", "a comparison decided on the proved values holds for the parts")],
+    "rounding": [("Neo.Rounding.shows_of_bounds", "lo ≤ v ≤ hi is an honest rounding of the exact value v"),
+                 ("Neo.Rounding.shows_of_eq", "the rounding proved for the proved value holds for the answer")],
+    "fidelity": [("Neo.Fidelity.kept_meet", "model → requirement for every row: every kept row meets it"),
+                 ("Neo.Fidelity.kept_meet_of_count", "zero kept rows that break it in the lake: the same, on the snapshot"),
+                 ("Neo.Fidelity.same_aggregate", "an equivalent filter gives the same count, sum or average")],
 }
 
 
@@ -246,7 +253,8 @@ class Goals:
 THEOREMS = sorted({n for v in LIBRARY.values() for n, _ in v} | {
     "Neo.Exact.frac_sub", "Neo.Exact.cmp_const_den", "Neo.Exact.decimal_exact", "Neo.Units.scale_cmp",
     "Neo.Units.scale_sum", "Neo.Units.rescale", "Neo.Extremum.subset_of_length", "Neo.Counterexample.fails_iff",
-    "Neo.Clash.clash_without", "Neo.Refinement.sat_mono"})
+    "Neo.Clash.clash_without", "Neo.Refinement.sat_mono", "Neo.Rounding.shows_add", "Neo.Rounding.shows_neg",
+    "Neo.Rounding.shows_close", "Neo.Compose.combine_eq", "Neo.Fidelity.same_rows", "Neo.Fidelity.count_le"})
 STANDARD_AXIOMS = ("propext", "Classical.choice", "Quot.sound")
 
 

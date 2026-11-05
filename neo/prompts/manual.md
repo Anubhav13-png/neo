@@ -12,7 +12,7 @@ You write in **ontology vocabulary**: entities, fields, relations. Never physica
 | field | meaning |
 |---|---|
 | `interpretation` | one precise sentence: which rows, which measure, which units, which time window |
-| `form` | `value`, `table`, `extremum`, `set`, `check`, `feasibility`, `optimisation` or `not_expressible` |
+| `form` | `value`, `table`, `extremum`, `set`, `check`, `feasibility`, `optimisation`, `plan` or `not_expressible` |
 | `universe` | `{"entity": <entity id>, "joins": [{"relation": <relation id>, "as": <alias>, "from": <alias, default the root>}], "scenario_set": <id, optional>, "grain": <alias, only after a one-to-many join>}` |
 | `rows` | per-row condition choosing the eligible rows; default `True` |
 | `define` | `{name: per-row expression}` derived values |
@@ -32,7 +32,7 @@ are hidden by the user's access level: never guess them.
 
 **Per-row vs whole-set.** `rows`, `define`, `group_by` are per row. Parameters, targets (except a per-row
 extremum or set), constraints and assumptions are whole-set: there a field must sit inside an aggregate
-(`sum(NETINCQ)`). Filters and groupings may only use plain parameters, not ones computed from aggregates.
+(`sum(branches_transferred)`). Filters and groupings may only use plain parameters, not ones computed from aggregates.
 
 ## The forms
 
@@ -45,6 +45,7 @@ extremum or set), constraints and assumptions are whole-set: there a field must 
 | `check` | is it true that ... | `{"scope": "rows", "claim": per-row}` or `{"scope": "global", "claim": whole-set}` | no counterexample among all rows / the claim follows |
 | `feasibility` | can / is it allowed / possible | `{"query": "exists"}` with variables, constraints, assumptions | a witness, or the clashing set (unsat core) and which single drop reopens it |
 | `optimisation` | largest allowed / break-even | `{"objective": expr, "sense": "max"/"min"}` | the optimum, nothing beyond it, and that it is reachable |
+| `plan` | questions with several parts: compare two groups, a value relative to another | `"nodes": {"N1": <value model>, "N2": ...}`, `"combine": {"columns": {name: expression over N1, N2 ...}}` | each node proved on its own, then combined exactly |
 | `not_expressible` | why / opinions / facts the data lacks | none | nothing; say in `interpretation` what data would be needed |
 
 ## Joins and double counting
@@ -62,18 +63,25 @@ different units or scales is rejected: convert first (thousands to billions: `/ 
 accumulate from January: use their one-period field. Do not add a level at a point in time (stock) to an amount
 over a period (flow).
 
-## Profit, risk and likelihood: real history as scenarios
+## How often, and what-if: real rows, never invented probabilities
 
-"How likely ...", "would it still ...", "how much could it absorb ..." are answered over real historical periods
-of an entity with a time field, never with invented probabilities. Prefer an approved `scenario_set`. Replay the
-action on each period's numbers; scale fixed amounts by size across decades; put the share without the action
-next to the share with it; add a `sensitivity` sweep for each stated number; say in `interpretation` that the
-result is a historical frequency for the stated window.
+"How often ...", "how likely ...", "would it still ..." are answered over the real rows, never with invented
+probabilities. Replay the action on each row's own numbers, put the share without the action next to the share
+with it, add a `sensitivity` sweep for each stated number, and say in `interpretation` that the result is a
+historical frequency over the stated rows.
 
-- likelihood: `form: value`, columns like `share(pretax_B - cost_B > 0)` and `count(...)`
-- break-even: `form: optimisation`, a variable for the shock, constraint `all_rows(<per-row condition with the
-  variable> )` (or `count(<bad condition>) <= k` to allow k bad periods), objective the variable
+- how often / would it still: `form: value`, columns like `share(<condition after the action>)` and `count(...)`
+- break-even / largest allowed: `form: optimisation`, a variable for the shock, constraint `all_rows(<per-row
+  condition with the variable>)` (or `count(<bad condition>) <= k` to allow k bad rows), objective the variable
 - An optimisation with a strict `<` or `>` has no maximum: write `<=` / `>=` for a break-even.
+
+## Plans: one small model per part
+
+When a question has parts that are each a single number (two groups to compare, a value as a share of another),
+write `form: plan`. Each node is a complete `value` model with a single `expr` target (filters, units and
+grounding of its own; the plan's `grounding` applies to every node). `combine.columns` holds expressions over the
+node ids only (`N1 > N2`, `N1 / N2`, `N1 - N2`). Each node is validated and proved on its own, so a mistake in
+one part is reported for that part.
 
 ## Examples
 
@@ -98,31 +106,48 @@ result is a historical frequency for the stated window.
 **Check.** "Was every generation-1 deal bought by JPMorgan's lead bank (certificate 628)?"
 `"form": "check", "universe": {"entity": "deal"}, "target": {"scope": "rows", "claim": "(generation == 1) == (acquirer_cert == 628)"}`
 
-**Likelihood.** "If JPMorgan had $3B more costs every quarter, how likely is it to stay profitable?"
+**How often after a shock.** "If every failed-bank target had lost another 5% of its assets, how many would still have had positive equity?"
 ```json
-{"interpretation": "Share of quarters since 2000 (JPMorgan's insured banks) with positive pre-tax income, as reported and after a $3B quarterly cost at today's size scaled by each quarter's assets. A historical frequency, not a forecast.",
- "form": "value", "universe": {"entity": "bank_quarter", "scenario_set": "ss_jpm_since_2000"},
- "parameters": {"extra_cost_B": {"expr": "3", "unit": "USD_billions"},
-                "assets_now_B": {"expr": "max_of(ASSET) / 1e6", "unit": "USD_billions"}},
- "define": {"pretax_B": "pretax_income / 1e6", "cost_B": "extra_cost_B * (ASSET / 1e6) / assets_now_B"},
- "target": {"columns": {"quarters": "count()", "p_now": "share(pretax_B > 0)", "p_with_cost": "share(pretax_B - cost_B > 0)"}},
- "sensitivity": [{"parameter": "extra_cost_B", "values": [0, 1, 3, 5, 10, 20]}],
- "grounding": {"terms": ["term_pretax_income_quarter", "term_historical_frequency"], "relations": [],
-   "constraints_applied": [{"id": "con_scenario_history", "how": "approved scenario set; cost scaled by assets; historical frequency"}],
+{"interpretation": "Among failed-bank targets with reported pre-deal equity and assets: how many had positive equity as reported, and how many still would after a loss of 5% of pre-deal assets. Counts over the real rows, not a forecast.",
+ "form": "value", "universe": {"entity": "deal"},
+ "rows": "is_assisted_failed and not_null(target_equity_pre_deal_000) and not_null(target_assets_pre_deal_000)",
+ "parameters": {"loss": {"expr": "0.05", "unit": "ratio"}},
+ "target": {"columns": {"targets": "count()", "positive_now": "count(target_equity_pre_deal_000 > 0)",
+                        "positive_after": "count(target_equity_pre_deal_000 - loss * target_assets_pre_deal_000 > 0)"}},
+ "sensitivity": [{"parameter": "loss", "values": [0, 0.01, 0.05, 0.1]}],
+ "grounding": {"terms": ["term_failed_bank_deal"], "relations": [],
+   "constraints_applied": [{"id": "con_failed_bank_definition", "how": "deal_category flag"},
+                           {"id": "con_blank_numeric_sorting", "how": "rows without equity or assets are left out"}],
    "constraints_not_applicable": []}}
 ```
 
-**Break-even.** Same universe (`ss_jpm_since_2010`) and parameter `assets_now_B`, plus
-`"form": "optimisation", "variables": [{"name": "cost_B", "sort": "Real", "domain": "cost_B >= 0", "unit": "USD_billions"}],
-"constraints": [{"name": "every_quarter", "expr": "all_rows(pretax_income / 1e6 - cost_B * (ASSET / 1e6) / assets_now_B >= 0)"}],
-"target": {"objective": "cost_B", "sense": "max"}`
+**Break-even.** "What is the highest equity-to-assets floor that every failed-bank target met?"
+`"form": "optimisation", "rows": "is_assisted_failed and not_null(target_equity_pre_deal_000) and target_assets_pre_deal_000 > 0",
+"variables": [{"name": "r", "sort": "Real", "domain": "r >= -100", "unit": "ratio"}],
+"constraints": [{"name": "every_target", "expr": "all_rows(target_equity_pre_deal_000 / target_assets_pre_deal_000 >= r)"}],
+"target": {"objective": "r", "sense": "max"}`
 
-**Feasibility with a rule.** "Can JPMorgan still buy a healthy bank in another state?"
+**Plan.** "Were failed-bank targets in Texas in the 1980s bigger on average than voluntary ones?"
 ```json
-{"form": "feasibility", "universe": {"entity": "bank_quarter"},
- "parameters": {"q": "max_of(quarter)",
-   "D_US": {"expr": "sum(DEPDOM / 1e6, source == 'industry' and quarter == q)", "unit": "USD_billions"},
-   "D_JPM": {"expr": "sum(DEPDOM / 1e6, source == 'holding_company:1039502' and quarter == q)", "unit": "USD_billions"},
+{"form": "plan", "interpretation": "Average pre-deal assets ($ millions) of Texas targets in 1980-1989 deals: failed-bank against voluntary, and whether the first is larger.",
+ "nodes": {
+   "N1": {"form": "value", "interpretation": "Average pre-deal assets in $ millions, Texas failed-bank targets, 1980-1989, blanks left out.",
+          "universe": {"entity": "deal"}, "rows": "is_assisted_failed and target_state == 'TX' and 1980 <= year <= 1989 and not_null(target_assets_pre_deal_000)",
+          "target": {"expr": "avg(target_assets_pre_deal_000 / 1000)"}},
+   "N2": {"form": "value", "interpretation": "Average pre-deal assets in $ millions, Texas voluntary targets, 1980-1989, blanks left out.",
+          "universe": {"entity": "deal"}, "rows": "deal_category == 'Voluntary M&A' and target_state == 'TX' and 1980 <= year <= 1989 and not_null(target_assets_pre_deal_000)",
+          "target": {"expr": "avg(target_assets_pre_deal_000 / 1000)"}}},
+ "combine": {"columns": {"failed_bigger": "N1 > N2", "ratio": "N1 / N2"}},
+ "grounding": {"constraints_applied": [{"id": "con_failed_bank_definition", "how": "deal_category flag"},
+   {"id": "con_blank_numeric_sorting", "how": "blanks left out of each average"},
+   {"id": "con_units", "how": "thousands / 1000 = millions"}]}}
+```
+
+**Feasibility with a rule.** "If US deposits total $17 trillion, could JPMorgan buy a healthy bank in another state under the deposit cap?"
+```json
+{"form": "feasibility", "universe": {"entity": "deal"},
+ "parameters": {"D_US": {"expr": "17000", "unit": "USD_billions"},
+   "D_JPM": {"expr": "max_of(acquirer_deposits_pre_deal_000 / 1e6, acquirer_cert == 628)", "unit": "USD_billions"},
    "cap": "rule_param('deposit_cap', 'cap')"},
  "variables": [{"name": "D_t", "sort": "Real", "domain": "D_t >= 0", "unit": "USD_billions"},
                {"name": "failing", "sort": "Bool"}, {"name": "interstate", "sort": "Bool"}],

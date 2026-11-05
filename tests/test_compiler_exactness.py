@@ -11,22 +11,24 @@ from neo.compiler.sql import Compiler
 from neo.execution.interpreter import Interpreter
 from neo.semantic.validator import ValidationContext, validate
 
-BANK = [
-    "NETINCQ / ASSET", "NETINCQ / 3", "NETINCQ / -7", "NIMQ / 4 - NONIXQ * 0.25", "NETINCQ / EQ",
-    "NETINCQ // 1000", "NETINCQ % 997", "-NETINCQ // 1000", "-NETINCQ % 997",
-    "ASSET if source == 'industry' else -ASSET", "min(NIMQ, NONIXQ)", "max(NIMQ, NONIXQ)", "abs(NETINCQ - ITAXQ)",
-    "source in ['industry', 'bank:628']", "not (source in ['industry'])", "contains(source, 'company')",
-    "startswith(lower(source), 'b')", "year_of(quarter)", "quarter >= '2008-09-30'",
-    "NETINCQ > 0 and ITAXQ < 1000000 or source == 'industry'", "implies(NETINCQ < 0, ITAXQ <= 0)",
-    "coalesce(IGLSECQ, 0)", "NETINCQ / (qtr - 2)", "NETINCQ / (qtr - 2) > 0", "ite(NETINCQ > 0, NIMQ, NONIIQ)",
-    "1 / (BANKS - 1)", "pretax_income", "qtr * 3 - 2",
-]
 DEAL = [
     "target_assets_pre_deal_000 / 1e6", "target_assets_pre_deal_000 > acquirer_assets_pre_deal_000",
     "target_to_acquirer_asset_ratio * 100", "coalesce(failure_cost_to_fdic_000, 0)", "is_null(failure_date)",
     "target_lat > 40", "year // 10 * 10", "same_state", "branches_transferred / 2", "is_assisted_failed",
     "not_null(target_assets_pre_deal_000) and target_assets_pre_deal_000 / 1e6 >= 1.5",
     "buyer.target_state == target_state", "buyer.generation",
+    "target_equity_pre_deal_000 / target_assets_pre_deal_000", "target_assets_pre_deal_000 / 3",
+    "target_assets_pre_deal_000 / -7", "target_deposits_pre_deal_000 / 4 - target_equity_pre_deal_000 * 0.25",
+    "generation // 2", "generation % 3", "-generation // 2", "-generation % 3", "branches_transferred // 1",
+    "target_assets_pre_deal_000 if target_state == 'TX' else -target_assets_pre_deal_000",
+    "min(target_assets_pre_deal_000, acquirer_assets_pre_deal_000)",
+    "max(target_assets_pre_deal_000, acquirer_assets_pre_deal_000)", "abs(target_equity_pre_deal_000)",
+    "target_state in ['TX', 'IL']", "not (target_state in ['TX'])", "contains(target_name, 'national')",
+    "startswith(lower(target_name), 'f')", "year_of(effective_date)", "effective_date >= '2008-09-25'",
+    "same_state and generation > 2 or target_state == 'NY'", "implies(is_assisted_failed, generation >= 1)",
+    "coalesce(branches_transferred, 0)", "target_assets_pre_deal_000 / (generation - 2)",
+    "target_assets_pre_deal_000 / (generation - 2) > 0", "ite(same_state, branches_transferred, 0)",
+    "1 / (generation - 1)", "generation * 3 - 2",
 ]
 
 
@@ -63,11 +65,6 @@ def compare(neo, entity, expr, joins=()):
     bad = [(k, via_sql[k], via_python.get(k)) for k in via_sql if via_sql[k] != via_python.get(k)]
     assert not bad, f"{expr}: {len(bad)} rows differ, e.g. {bad[:3]}"
     return len(via_sql)
-
-
-@pytest.mark.parametrize("expr", BANK)
-def test_bank_history_expressions(neo, expr):
-    assert compare(neo, "bank_quarter", expr) == 510
 
 
 @pytest.mark.parametrize("expr", DEAL)

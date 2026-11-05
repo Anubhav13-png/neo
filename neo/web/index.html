@@ -505,10 +505,11 @@ async function poll(first) {
 }
 
 /* ---------------- run view ---------------- */
-const DERIVED = new Set(["math", "columns", "validate", "execute", "prove", "check"]);
+const DERIVED = new Set(["fidelity", "math", "columns", "validate", "execute", "prove", "check"]);
 function stepDone(d, s) {
   const has = (k) => d.steps.find((x) => x.key === k)?.done;
   if (s.key === "pin") return true;
+  if (s.key === "answer_check") return has("answer") && !!d.answer_check;
   if (s.key === "ontology") return has("retrieve") && !!d.ontology_use;
   if (DERIVED.has(s.key)) return has("formalize") && !d.formalize?.failed && !!d.proof;
   return s.done;
@@ -543,7 +544,7 @@ function render(d) {
   </div>
   <div class="panel">
     <div class="stepper" id="stepper">${stepper}</div>
-    <div class="legend"><span class="a">code (deterministic)</span><span class="b">language model</span><span>Steps 5 to 10 run inside Formalize for every attempt; they are split out here so you can read them.</span></div>
+    <div class="legend"><span class="a">code (deterministic)</span><span class="b">language model</span><span>The fidelity check and the steps from “Constraints, term by term” to “Independent check” run inside Formalize for every attempt; they are split out here so you can read them.</span></div>
   </div>`;
   d.steps.forEach((s, i) => { html += section(d, s, i + 1); });
   $("#view").innerHTML = html;
@@ -559,6 +560,12 @@ function section(d, s, n) {
     <div class="top"><div class="num">${n}</div><div><h2>${esc(s.label)}</h2><p>${esc(s.about)}</p></div>
       <div class="right">${s.llm ? '<span class="chip llm">LLM</span>' : '<span class="chip">code</span>'}${ms}</div></div>
     <div class="body">${body}</div></section>`;
+}
+
+function claimChip(r) {
+  const good = ["matched", "proved", "true", "added", "narrower", "checked", "optimal", "feasible", "infeasible", "refuted", "holds"];
+  const bad = ["contradicted", "missing", "wrong", "unsupported", "rejected", "failed", "mismatch", "removed"];
+  return `<span class="chip ${good.includes(r) ? "ok" : bad.includes(r) ? "bad" : ""}">${esc(String(r ?? "—").replace(/_/g, " "))}</span>`;
 }
 
 function leanHtml(L) {
@@ -620,6 +627,25 @@ const BODY = {
       <details><summary>Exactly what the LLM is shown: the ontology briefing (no row data)</summary><div><div class="codebox"><pre>${esc(r.briefing)}</pre></div></div></details>
       <details><summary>The fixed instructions sent with every question (role, how to write a model, functions)</summary><div>
         <div class="codebox"><pre>${esc(r.role)}\n\n${esc(r.manual)}\n\n## Functions\n${esc(r.functions)}</pre></div></div></details>`;
+  },
+  requirements(d) {
+    const r = d.requirements || {};
+    const reqs = r.requirements || [];
+    if (!reqs.length) return `<div class="hint">${esc(r.note || "No requirements were listed for this run")}; the meaning of the model was checked only by the LLM review.</div>`;
+    return `<div class="callout llm">A second LLM read the question and the briefing, <b>never the model</b>, and wrote down what a correct answer must respect. Because it works separately, it cannot share the model writer's misreading.</div>
+      <div class="sub">I understood the question as</div>
+      <table class="t"><tr><th>id</th><th>kind</th><th>requirement</th><th>formal form</th></tr>
+      ${reqs.map((x) => `<tr><td class="mono">${esc(x.id)}</td><td>${esc(x.kind)}</td><td>${esc(x.text)}</td><td class="mono">${esc(x.expr || x.entity || [x.aggregate, x.of].filter(Boolean).join(" of ") || [x.sense, x.top].filter(Boolean).join(", top ") || "—")}</td></tr>`).join("")}</table>`;
+  },
+  fidelity(d) {
+    const f = d.fidelity || {}, rs = f.results || [];
+    if (!rs.length) return '<div class="hint">No requirements were listed, so the fidelity check did not run.</div>';
+    const tone = { matched: "ok", narrower: "ok", failed: "bad" }[f.status] || "";
+    return `<p><span class="chip ${tone}">${esc(f.status)}</span></p>
+      <div class="callout">For each filter, the lake counts the rows the model keeps that the requirement excludes (must be 0), and the rows the question includes that the model leaves out (allowed only when a value the model needs is missing). Z3 then tries to prove “model → requirement” for every possible row, and that becomes a Lean theorem in the claim ledger.</div>
+      <div class="scroll"><table class="t"><tr><th>requirement</th><th>kind</th><th>how it was checked</th><th class="num">rows</th><th>result</th></tr>
+      ${rs.map((x) => `<tr><td><span class="mono">${esc(x.id)}${x.node ? " · " + esc(x.node) : ""}</span><div>${esc(x.text)}</div>${x.expr ? `<div class="mono hint">${esc(x.expr)}</div>` : ""}</td><td>${esc(x.kind)}</td><td>${esc(x.method || "")}${x.symbolic ? `<div class="hint">${esc(x.symbolic)}</div>` : ""}<div class="hint">${esc(x.detail || "")}</div></td><td class="num mono">${x.counts ? esc(Object.entries(x.counts).map(([k, v]) => k.replace(/_/g, " ") + ": " + v).join("; ")) : ""}</td><td>${claimChip(x.result)}</td></tr>`).join("")}</table></div>
+      ${rs.some((x) => (x.examples || []).length) ? `<details><summary>Example rows behind a failed check (people only)</summary><div>${valueHtml(rs.flatMap((x) => x.examples || []))}</div></details>` : ""}`;
   },
   formalize(d) {
     const f = d.formalize || {};
@@ -752,7 +778,11 @@ const BODY = {
           : form === "feasibility" ? "Z3 looked for values of the unknowns satisfying everything. If none exist, it names the smallest set of constraints that clash, and tests dropping each one."
           : "Z3 checked whether the claim follows from the constraints."];
     }
+    if (form === "plan") story = ["The question was split into small parts. Each part is a value model, proved on its own: exact lake aggregates, Z3, and the independent recomputation.", "The parts' proved values were then combined with exact fractions; Z3 proved each combined value unique, and Lean checked the combination from the parts' values."];
     let h = story.length ? `<div class="sub">How it was solved</div><ol class="story">${story.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : "";
+    if (d.plan) h += `<div><div class="sub">The parts</div><div class="scroll"><table class="t"><tr><th>part</th><th>what it computes</th><th class="num">eligible rows</th><th>value</th><th>status</th></tr>
+      ${Object.entries(d.plan.nodes).map(([k, n]) => `<tr><td class="mono">${esc(k)}</td><td>${esc(n.interpretation || "")}<div class="mono hint">${esc((d.plan.models[k] || {}).rows || "")}</div></td><td class="num">${fmtNum(n.eligible_rows)}</td><td class="mono">${esc(JSON.stringify(n.answer))}</td><td>${claimChip(n.status)}</td></tr>`).join("")}
+      ${Object.entries(d.plan.combine).map(([k, e]) => `<tr><td class="mono">${esc(k)}</td><td class="mono">${esc(e)}</td><td></td><td class="mono">${esc(JSON.stringify((p.answer || {})[k]))}</td><td><span class="chip ok">combined</span></td></tr>`).join("")}</table></div></div>`;
     if (ex.rounds?.length) h += `<div><div class="sub">Solving rounds</div><div class="scroll"><table class="t"><tr><th>round</th><th>what Z3 did</th><th class="num">rows Z3 saw</th><th>Z3's answer</th><th class="num">rows in the lake that break it</th><th class="num">rows added</th></tr>
       ${ex.rounds.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.solve)}</td><td class="num">${fmtNum(r.working_rows)}</td><td class="mono">${esc(JSON.stringify(r.candidate))}</td><td class="num">${r.violating_rows ? `<span style="color:var(--bad)">${fmtNum(r.violating_rows)}</span>` : '<span style="color:var(--ok)">0 ✓</span>'}</td><td class="num">${fmtNum(r.added)}</td></tr>`).join("")}</table></div>
       <p class="hint">A round with zero breaking rows ends the loop. Because a subset of rows can only relax the constraints, an optimum that holds on every row of the lake is the true optimum.</p></div>`;
@@ -799,7 +829,27 @@ const BODY = {
   },
   answer(d) {
     return `${d.answer ? md(d.answer) : '<div class="hint">No answer text.</div>'}
-      <p class="hint">Written by the LLM from the LLM-safe certificate only. The numbers it may use are the proved ones above.</p>`;
+      <p class="hint">Written by the LLM from the LLM-safe certificate only, with numbers as slots that neo fills from the proved values. This is the final text, after the answer check below.</p>`;
+  },
+  answer_check(d) {
+    const a = d.answer_check || {};
+    if (!a.checked) return '<div class="hint">The answer check is turned off (pipeline.answer_check).</div>';
+    const claims = a.claims || [], drafts = a.drafts || [];
+    let h = `<div class="callout">A program checked every claim: slots are filled from the exact values, every other number must match a proved value at the precision shown (or a share of two of them, or a number in the certificate or the question), comparisons and derived values are recomputed with exact fractions, and caveats the ontology requires must be there. ${a.format === "text" ? "<b>The writer replied in plain text</b>, so only the numbers could be checked." : ""}</div>`;
+    h += `<div><div class="sub">Claims</div><div class="scroll"><table class="t"><tr><th>claim</th><th>kind</th><th>text</th><th>checked by</th><th>result</th></tr>
+      ${claims.map((c) => `<tr><td class="mono">${esc(c.id)}</td><td>${esc(c.kind)}</td><td>${esc(c.text)}</td><td>${esc(c.checker || "")}${c.detail ? `<div class="hint">${esc(c.detail)}</div>` : ""}</td><td>${claimChip(c.result)}</td></tr>`).join("")}</table></div></div>`;
+    if (drafts.length > 1 || (drafts[0]?.problems || []).length) h += `<div><div class="sub">Drafts and repairs</div>${drafts.map((x, i) => `<div class="att"><div class="ah">Draft ${i + 1} ${(x.problems || []).length ? '<span class="chip bad">problems sent back</span>' : '<span class="chip ok">passed</span>'}</div><div class="ab">${x.text ? md(x.text) : ""}${(x.problems || []).length ? `<div class="callout bad"><ul>${x.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}</div></div>`).join("")}</div>`;
+    if ((a.removed || []).length) h += `<div class="callout bad"><b>Removed from the answer</b> (still unsupported after the repairs):<ul>${a.removed.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+    if ((a.added_caveats || []).length) h += `<div class="callout">Caveats added by neo from the ontology's own text: ${a.added_caveats.map((x) => `<span class="chip">${esc(x)}</span>`).join(" ")}</div>`;
+    return h;
+  },
+  ledger(d) {
+    const l = d.ledger || {}, rows = l.rows || [], sm = l.summary || {};
+    let h = `<div class="chips"><span class="chip ok">${sm.checked || 0} checked</span>${sm.failed ? `<span class="chip bad">${sm.failed} failed</span>` : ""}${sm.removed ? `<span class="chip bad">${sm.removed} removed</span>` : ""}${sm.not_checked ? `<span class="chip">${sm.not_checked} not checkable</span>` : ""}</div>
+      <div class="scroll"><table class="t"><tr><th>claim</th><th>from</th><th>text</th><th>checked by</th><th>result</th></tr>
+      ${rows.map((r) => `<tr><td class="mono">${esc(r.id)}</td><td><span class="chip ${r.source === "answer" || r.source === "question" ? "llm" : "acc"}">${esc(r.source)}</span></td><td>${esc(r.text)}${r.detail ? `<div class="hint">${esc(r.detail)}</div>` : ""}</td><td>${esc(r.checker || "")}</td><td>${claimChip(r.result)}${r.lean ? ` <span class="chip ${r.lean === "checked" ? "ok" : "warn"}">Lean ${esc(r.lean)}</span>` : ""}</td></tr>`).join("")}</table></div>
+      <p class="hint">Claims come from three writers: the requirements LLM (about the question), the model LLM (proved by the lake, Z3, the recomputation and Lean) and the answer LLM. None reaches you unchecked.</p>`;
+    return h + leanHtml(l.lean);
   },
   route(d) {
     const r = d.route || {};
@@ -823,6 +873,7 @@ const FORM_HOW = {
   check: "a search for a counterexample over every row; none found means the claim holds on this snapshot.",
   feasibility: "Z3 searches for values of the unknowns satisfying every constraint, or reports which constraints clash.",
   optimisation: "Z3 finds the optimum; above 5,000 rows it uses refinement (solve on a subset, check all rows in SQL, add violators, repeat) and proves nothing better is allowed.",
+  plan: "each part is a value model proved on its own (exact aggregates, Z3, independent recomputation); the parts' proved values are then combined with exact fractions, Z3 proves each combined value, and Lean checks it.",
   not_expressible: "nothing is computed; the interpretation says what data would be needed.",
 };
 

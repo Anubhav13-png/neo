@@ -4,6 +4,9 @@ import Neo.Refinement
 import Neo.Extremum
 import Neo.Counterexample
 import Neo.Clash
+import Neo.Rounding
+import Neo.Compose
+import Neo.Fidelity
 
 /-!
 # neo: the methods behind every proof, checked by Lean
@@ -17,6 +20,9 @@ No data is involved; the per-run checks (`neo/proof/lean.py`) are separate files
 * `Neo.Extremum`       the verification count proves a top / bottom ranking
 * `Neo.Counterexample` zero counterexamples means a per-row claim holds
 * `Neo.Clash`          a constraint whose removal opens a route is in every clash
+* `Neo.Rounding`       a number shown in an answer is the exact value, rounded honestly
+* `Neo.Compose`        proved parts of a plan give the combined value
+* `Neo.Fidelity`       a filter that meets the requirements keeps only (or exactly) the rows asked about
 
 Build: `lake build` in this folder (or `neo lean build`). Uses only Lean's core library, no Mathlib.
 -/

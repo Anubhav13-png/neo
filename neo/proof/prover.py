@@ -658,6 +658,7 @@ class Prover:
                                   "result": "none (proved on this snapshot)" if holds else f"{failing} found"},
                                  {"step": "rows where the claim cannot be decided (missing values)", "method": "count",
                                   "result": unk}],
+                "counts": {"checked": total - unk, "failing": failing, "undecided": unk},
                 "self_check": self.self_check(compare), "evidence": {"counterexamples": counter, "row_data": True}}
 
     def form_feasibility(self) -> dict:

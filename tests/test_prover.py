@@ -22,16 +22,20 @@ def exact(p, key):
 
 
 def test_value_columns(neo):
-    p = prove(neo, {"form": "value", "interpretation": "industry net income in 2020, average assets, profitable share",
-                    "universe": {"entity": "bank_quarter"}, "rows": "source == 'industry' and year == 2020",
-                    "target": {"columns": {"ni": "sum(NETINCQ)", "avg_assets": "avg(ASSET)",
-                                           "profitable": "share(pretax_income > 0)", "n": "count()"}}})
-    rows = direct(neo, "SELECT NETINCQ, ASSET, PTAXNETINCQ + IGLSECQ FROM {bank_quarterly} "
-                       "WHERE source = 'industry' AND year = 2020")
+    p = prove(neo, {"form": "value", "interpretation": "failed-bank deals: branches, average pre-deal assets, share in-state",
+                    "universe": {"entity": "deal"}, "rows": "is_assisted_failed",
+                    "target": {"columns": {"branches": "sum(branches_transferred)",
+                                           "avg_assets": "avg(target_assets_pre_deal_000)",
+                                           "in_state": "share(same_state)", "n": "count()"}},
+                    "grounding": ground(neo)})
+    rows = direct(neo, "SELECT branches_transferred, target_assets_pre_deal_000, same_state FROM {deals} "
+                       "WHERE deal_category = 'Assisted / failed-bank deal'")
+    assets = [Fraction(repr(r[1])) for r in rows if r[1] is not None]
     assert p["status"] == "proved" and p["self_check"]["matches"] and p["exactness"]["exact"]
-    assert p["answer"]["ni"] == sum(r[0] for r in rows) and p["answer"]["n"] == len(rows) == 4
-    assert exact(p, "avg_assets") == Fraction(sum(r[1] for r in rows), len(rows))
-    assert exact(p, "profitable") == Fraction(sum(1 for r in rows if r[2] > 0), len(rows))
+    assert p["answer"]["branches"] == sum(Fraction(repr(r[0])) for r in rows if r[0] is not None)
+    assert p["answer"]["n"] == len(rows) == 238
+    assert exact(p, "avg_assets") == sum(assets) / len(assets)
+    assert exact(p, "in_state") == Fraction(sum(1 for r in rows if r[2]), len(rows))
 
 
 def test_table_with_join(neo):
@@ -81,45 +85,51 @@ def test_set_and_check(neo):
     assert r["status"] == "refuted" and str(bad) in r["answer"] and r["evidence"]["counterexamples"]
 
 
-def roa(neo, where="TRUE"):
-    """Every quarter's net income / assets, sorted: the ground truth for the floor below."""
-    return sorted(Fraction(n, a) for n, a in direct(
-        neo, f"SELECT NETINCQ, ASSET FROM {{bank_quarterly}} WHERE NETINCQ IS NOT NULL AND ASSET > 0 AND {where}"))
+def capital(neo, where="TRUE"):
+    """Every target's pre-deal equity / assets, sorted: the ground truth for the floor below."""
+    return sorted(Fraction(repr(e)) / Fraction(repr(a)) for e, a in direct(
+        neo, f"SELECT target_equity_pre_deal_000, target_assets_pre_deal_000 FROM {{deals}} "
+             f"WHERE target_equity_pre_deal_000 IS NOT NULL AND target_assets_pre_deal_000 > 0 AND {where}"))
 
 
-# a ratio, not NETINCQ >= r * ASSET: income is a flow and assets a stock, which the validator will not compare
-FLOOR = {"form": "optimisation", "interpretation": "the highest return-on-assets floor that every quarter meets",
-         "universe": {"entity": "bank_quarter"}, "rows": "not_null(NETINCQ) and ASSET > 0",
-         "variables": [{"name": "r", "sort": "Real", "domain": "r >= -1", "unit": "ratio"}],
-         "constraints": [{"name": "every_quarter", "expr": "all_rows(NETINCQ / ASSET >= r)"}],
-         "target": {"objective": "r", "sense": "max"}}
+FLOOR = {"form": "optimisation", "interpretation": "the highest equity-to-assets floor that every target meets",
+         "universe": {"entity": "deal"},
+         "rows": "not_null(target_equity_pre_deal_000) and target_assets_pre_deal_000 > 0",
+         "variables": [{"name": "r", "sort": "Real", "domain": "r >= -100", "unit": "ratio"}],
+         "constraints": [{"name": "every_target", "expr": "all_rows(target_equity_pre_deal_000 / target_assets_pre_deal_000 >= r)"}],
+         "target": {"objective": "r", "sense": "max"},
+         "grounding": {"constraints_not_applicable": [{"id": "con_units", "why": "a ratio of two thousands columns"},
+                                                      {"id": "con_blank_numeric_sorting", "why": "blanks are filtered"}]}}
 
 
-def test_floor_by_refinement_on_every_quarter(neo):
-    """The highest return on assets every quarter meets: forced past the direct limit, so it is solved by
+def test_floor_by_refinement_on_every_target(neo):
+    """The highest capital ratio every target met: forced past the direct limit, so it is solved by
     counterexample-guided refinement."""
     neo.cfg["proof"].update(symbolic_max_rows=100, cegar_seed_rows=20, cegar_batch=20)
     p = prove(neo, FLOOR)
     assert p["status"] == "optimal" and p["solver"]["mode"] == "cegar"
-    assert Fraction(p["exact_values"]["objective"]) == roa(neo)[0]
-    q = prove(neo, {**FLOOR, "constraints": [{"name": "at_most_10_below", "expr": "count(NETINCQ / ASSET < r) <= 10"}]})
-    assert q["solver"]["mode"] == "cegar" and q["solver"]["rounds"] >= 2       # violating quarters were added
-    assert Fraction(q["exact_values"]["objective"]) == roa(neo)[10]
+    assert Fraction(p["exact_values"]["objective"]) == capital(neo)[0]
+    q = prove(neo, {**FLOOR, "constraints": [{"name": "at_most_10_below",
+                                              "expr": "count(target_equity_pre_deal_000 / target_assets_pre_deal_000 < r) <= 10"}]})
+    assert q["solver"]["mode"] == "cegar" and q["solver"]["rounds"] >= 2       # violating targets were added
+    assert Fraction(q["exact_values"]["objective"]) == capital(neo)[10]
 
 
 def test_floor_direct_matches_refinement(neo):
-    raw = {**FLOOR, "rows": "source == 'holding_company:1039502' and not_null(NETINCQ) and ASSET > 0"}
+    raw = {**FLOOR, "rows": "is_assisted_failed and not_null(target_equity_pre_deal_000) and target_assets_pre_deal_000 > 0",
+           "grounding": {"constraints_not_applicable": FLOOR["grounding"]["constraints_not_applicable"] +
+                         [{"id": "con_failed_bank_definition", "why": "uses the deal_category flag"}]}}
     full = prove(neo, raw)
     neo.cfg["proof"].update(symbolic_max_rows=10, cegar_seed_rows=5)
     ref = prove(neo, raw)
     assert full["solver"]["mode"] == "full" and ref["solver"]["mode"] == "cegar"
     assert full["exact_values"] == ref["exact_values"]
-    assert Fraction(full["exact_values"]["objective"]) == roa(neo, "source = 'holding_company:1039502'")[0]
+    assert Fraction(full["exact_values"]["objective"]) == capital(neo, "deal_category = 'Assisted / failed-bank deal'")[0]
 
 
 def test_unbounded_and_strict(neo):
     raw = {"form": "optimisation", "interpretation": "an unbounded objective, precisely stated",
-           "universe": {"entity": "bank_quarter"}, "variables": [{"name": "x", "sort": "Real"}],
+           "universe": {"entity": "deal"}, "variables": [{"name": "x", "sort": "Real"}],
            "constraints": [{"name": "c", "expr": "x >= 0"}], "target": {"objective": "x", "sense": "max"}}
     assert prove(neo, raw)["status"] == "unbounded"
     raw["constraints"] = [{"name": "c", "expr": "x < 5"}]
@@ -128,11 +138,12 @@ def test_unbounded_and_strict(neo):
 
 
 def test_feasibility_core_probes_and_backtest(neo):
+    """Under the deposit cap, with JPMorgan's largest pre-deal deposits from the data ($2,472.9B) and a stated US total of
+    $30T: 10% is $3T, so there is room."""
     raw = {"form": "feasibility", "interpretation": "healthy interstate target under the deposit cap",
-           "universe": {"entity": "bank_quarter"},
-           "parameters": {"q": "max_of(quarter)",
-                          "D_US": {"expr": "sum(DEPDOM / 1e6, source == 'industry' and quarter == q)", "unit": "USD_billions"},
-                          "D_JPM": {"expr": "sum(DEPDOM / 1e6, source == 'holding_company:1039502' and quarter == q)",
+           "universe": {"entity": "deal"},
+           "parameters": {"D_US": {"expr": "30000", "unit": "USD_billions"},
+                          "D_JPM": {"expr": "max_of(acquirer_deposits_pre_deal_000 / 1e6, acquirer_cert == 628)",
                                     "unit": "USD_billions"},
                           "cap": "rule_param('deposit_cap', 'cap')"},
            "variables": [{"name": "D_t", "sort": "Real", "domain": "D_t >= 0", "unit": "USD_billions"},
@@ -141,35 +152,52 @@ def test_feasibility_core_probes_and_backtest(neo):
                             "source": "rule:deposit_cap"}],
            "assumptions": [{"name": "healthy", "expr": "not failing"}, {"name": "out_of_state", "expr": "interstate"},
                            {"name": "has_deposits", "expr": "D_t > 0"}],
-           "target": {"query": "exists"},
+           "target": {"query": "exists"}, "grounding": ground(neo),
            "backtest": {"universe": {"entity": "deal"}, "rows": "generation == 1 and is_assisted_failed", "limit": 50,
                         "bind": {"D_t": "target_deposits_pre_deal_000 / 1e6", "failing": "is_assisted_failed",
                                  "interstate": "target_state != 'NY'"}}}
     p = prove(neo, raw)
-    jpm, us = p["parameters"]["D_JPM"], p["parameters"]["D_US"]
-    if jpm >= 0.1 * us:
-        assert p["status"] == "infeasible" and {"R1", "healthy", "out_of_state"} <= set(p["solver"]["unsat_core"])
-        assert {"healthy", "out_of_state"} <= set(p["solver"]["routes_that_open"])
-    else:
-        assert p["status"] == "feasible"
+    (jpm,), = direct(neo, "SELECT MAX(acquirer_deposits_pre_deal_000) / 1e6 FROM {deals} WHERE acquirer_cert = 628")
+    assert abs(p["parameters"]["D_JPM"] - jpm) < 1e-6
+    assert p["status"] == "feasible"
     assert p["backtest"]["passed"] and p["backtest"]["cases"] > 0
 
 
+def test_infeasible_core_and_probes(neo):
+    raw = {"form": "feasibility", "interpretation": "a stated US total of $17T: 10% is $1.7T, below JPMorgan's $2.47T, so no room",
+           "universe": {"entity": "deal"},
+           "parameters": {"D_US": {"expr": "17000", "unit": "USD_billions"},
+                          "D_JPM": {"expr": "max_of(acquirer_deposits_pre_deal_000 / 1e6, acquirer_cert == 628)",
+                                    "unit": "USD_billions"},
+                          "cap": "rule_param('deposit_cap', 'cap')"},
+           "variables": [{"name": "D_t", "sort": "Real", "domain": "D_t >= 0", "unit": "USD_billions"},
+                         {"name": "failing", "sort": "Bool"}, {"name": "interstate", "sort": "Bool"}],
+           "constraints": [{"name": "R1", "expr": "implies(interstate and not failing, D_JPM + D_t <= cap * D_US)",
+                            "source": "rule:deposit_cap"}],
+           "assumptions": [{"name": "healthy", "expr": "not failing"}, {"name": "out_of_state", "expr": "interstate"},
+                           {"name": "has_deposits", "expr": "D_t > 0"}],
+           "target": {"query": "exists"}, "grounding": ground(neo)}
+    p = prove(neo, raw)
+    assert p["status"] == "infeasible" and {"R1", "healthy", "out_of_state"} <= set(p["solver"]["unsat_core"])
+    assert {"healthy", "out_of_state"} <= set(p["solver"]["routes_that_open"])
+
+
 def test_sensitivity_reruns_the_model(neo):
-    p = prove(neo, {"form": "value", "interpretation": "quarters whose net income exceeds a threshold",
-                    "universe": {"entity": "bank_quarter"},
+    p = prove(neo, {"form": "value", "interpretation": "targets whose pre-deal assets exceed a threshold",
+                    "universe": {"entity": "deal"},
                     "parameters": {"t": {"expr": "1000000", "unit": "USD_thousands"}},
-                    "target": {"expr": "count(NETINCQ > t)"},
+                    "target": {"expr": "count(target_assets_pre_deal_000 > t)"}, "grounding": ground(neo),
                     "sensitivity": [{"parameter": "t", "values": [0, 1000000, 10000000]}]})
     got = {r["value"]: r["answer"] for r in p["sensitivity"][0]["runs"]}
     for t in (0, 1000000, 10000000):
-        assert got[t] == direct(neo, f"SELECT COUNT(*) FROM {{bank_quarterly}} WHERE NETINCQ > {t}")[0][0]
+        assert got[t] == direct(neo, f"SELECT COUNT(*) FROM {{deals}} WHERE target_assets_pre_deal_000 > {t}")[0][0]
 
 
 def test_second_engine_when_too_large(neo):
     neo.cfg["verification"]["exact_max_rows"] = 100
-    p = prove(neo, {"form": "value", "interpretation": "total assets over every quarter",
-                    "universe": {"entity": "bank_quarter"}, "target": {"expr": "sum(ASSET)"}})
+    p = prove(neo, {"form": "value", "interpretation": "total pre-deal assets over every target",
+                    "universe": {"entity": "deal"}, "target": {"expr": "sum(target_assets_pre_deal_000)"},
+                    "grounding": ground(neo)})
     assert p["self_check"]["matches"] and p["self_check"]["exact"] is False and "second engine" in p["self_check"]["method"]
 
 

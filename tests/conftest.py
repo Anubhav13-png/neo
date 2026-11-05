@@ -1,5 +1,5 @@
-"""Shared fixtures: one platform over the real data (the deals CSV and FDIC history from saved API responses in
-tests/data/fdic), built once per test session in a temporary directory. No network, no API key, no synthetic data."""
+"""Shared fixtures: one platform over the real data (the deals CSV, 955 rows), built once per test session in a
+temporary directory. No network, no API key, no synthetic data."""
 import copy
 import json
 import os
@@ -18,7 +18,6 @@ from neo.llm.providers import ScriptedLLM  # noqa: E402
 from neo.orchestrator import Neo  # noqa: E402
 
 
-FDIC_CACHE = os.path.join(ROOT, "tests", "data", "fdic")
 # The real data is all public; access tests need fields above a user's clearance, so the tests' copy of the
 # ontology raises two deals fields (the ontology in ontology/source is unchanged).
 TEST_CLASSIFICATION = {"failure_cost_to_fdic_000": "confidential", "acquirer_website": "restricted"}
@@ -47,6 +46,7 @@ def make_cfg(base: str, **over) -> dict:
                                                 "users": os.path.join(ROOT, "tests", "users.yaml")},
                                  "llm": {"default": {"provider": "scripted"}, "tasks": {}},
                                  "lean": {"enabled": "off"}})     # tests/test_lean.py turns it on
+    cfg["llm"]["tasks"] = {}       # only the providers a test passes; no requirements writer unless it scripts one
     for k, v in over.items():
         cfg[k].update(v)
     return cfg
@@ -58,7 +58,7 @@ def base(tmp_path_factory):
     os.makedirs(f"{d}/ontology")
     copy_ontology(f"{d}/ontology/source")
     neo = Neo(make_cfg(d))
-    init_demo(neo, fdic_cache=FDIC_CACHE, say=lambda *_: None)
+    init_demo(neo, say=lambda *_: None)
     return d
 
 
@@ -68,10 +68,15 @@ def neo(base):
     return Neo(make_cfg(base))
 
 
-def script(neo: Neo, *replies, answer: str = "scripted answer") -> ScriptedLLM:
+def script(neo: Neo, *replies, answer="scripted answer", requirements=None) -> ScriptedLLM:
+    """Scripted model writer and reviewer (replies in order), answer writer (one reply, or a list for repairs) and,
+    when `requirements` is given, the requirements writer."""
     w = ScriptedLLM(responses=list(replies))
-    neo.gateway = LLMGateway(neo.cfg, neo.runs, providers={"default": w, "formalize": w, "review": w,
-                                                           "answer": ScriptedLLM(responses=[answer])})
+    providers = {"default": w, "formalize": w, "review": w,
+                 "answer": ScriptedLLM(responses=list(answer) if isinstance(answer, list) else [answer])}
+    if requirements is not None:
+        providers["requirements"] = ScriptedLLM(responses=[{"requirements": requirements}])
+    neo.gateway = LLMGateway(neo.cfg, neo.runs, providers=providers)
     return w
 
 

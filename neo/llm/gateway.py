@@ -1,6 +1,6 @@
 """The LLM gateway: the only way any part of neo talks to a language model.
 
-  routing    each task (formalize, review, answer) goes to the model configured for it
+  routing    each task (requirements, formalize, review, answer) goes to the model configured for it
   budgets    per-user daily token budget, checked before every call
   egress     refuses a call whose payload carries row-level data when governance forbids it
   logging    every call (task, model, tokens, latency, prompt hash) is recorded in the run store
@@ -33,6 +33,8 @@ class LLMGateway:
         self.allow_rows = cfg["governance"].get("allow_row_samples_to_llm", False)
 
     def llm(self, task: str) -> LLM:
+        if task in self.providers:
+            return self.providers[task]
         key = task if task in self.specs else "default"
         if key not in self.providers:
             if key != "default" and self.specs[key] is self.specs["default"]:
@@ -40,6 +42,11 @@ class LLMGateway:
             else:
                 self.providers[key] = make_llm(self.specs[key])
         return self.providers[key]
+
+    def routes(self, task: str) -> bool:
+        """True when the config (llm.tasks) or the caller's providers route this task. Optional tasks, like the
+        requirements writer, are skipped when nothing routes them."""
+        return task in self.specs or task in self.providers
 
     def describe(self, task: str = "formalize") -> str:
         try:

@@ -111,6 +111,6 @@ def test_single_user_deployment(neo):
     p = neo.principal("admin")
     assert p.clearance == "restricted" and not p.row_policies and p.can_approve and p.large_queries
     rep = run_golden(neo, os.path.join(ROOT, "golden", "core.yaml"))
-    assert [s["id"] for s in rep["skipped"]] == ["failed_deals_in_state"] and rep["cases"] == 6
+    assert [s["id"] for s in rep["skipped"]] == ["failed_deals_in_state"] and rep["cases"] == 7
     assert {r["run_id"] for r in rep["results"]} and all(neo.runs.run(r["run_id"])["user"] == "admin"
                                                          for r in rep["results"])

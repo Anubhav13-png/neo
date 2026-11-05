@@ -118,7 +118,7 @@ class LocalLakehouse(Catalog):
 
     def write_from_rows(self, con, table: str, columns: Sequence[Tuple[str, str]], rows: Sequence[Sequence],
                         source: str, note: str = "") -> str:
-        """Write Python rows with declared SQL types, e.g. [("quarter", "DATE"), ("NETINCQ", "BIGINT")]."""
+        """Write Python rows with declared SQL types, e.g. [("effective_date", "DATE"), ("target_cert", "BIGINT")]."""
         tmp = "neo_ingest_" + sha(table + now_iso(), 8)
         cols = ", ".join(f'"{c}" {t}' for c, t in columns)
         con.execute(f"CREATE TEMP TABLE {tmp} ({cols})")

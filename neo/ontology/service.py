@@ -108,12 +108,12 @@ def scope_targets(onto: Ontology, entities: Set[str], fields: List[Field]) -> Se
 
 
 def triggered_block_constraints(onto: Ontology, question: str, used_fields: List[Field],
-                                used_entities: Set[str]) -> List[Constraint]:
+                                used_entities: Set[str], severity: str = "block") -> List[Constraint]:
     """`block` constraints a model must address.
 
     By wording: the question contains a trigger word, and the constraint is about the model's entities (or about
-    no entity at all, like a legal rule on a concept). A deals rule does not fire on a bank-history model just
-    because both questions say "cost".
+    no entity at all, like a legal rule on a concept). A rule about one entity does not fire on a model over another
+    entity just because both questions use the same word.
     By use: the model reads a field (or entity) the constraint targets. Legal rules and methodology rules are
     triggered only by wording, since they are about what is asked, not which columns are touched.
     """
@@ -124,7 +124,7 @@ def triggered_block_constraints(onto: Ontology, question: str, used_fields: List
     attached = attached_targets(onto)
     out = []
     for c in onto.constraints.values():
-        if c.severity != "block":
+        if c.severity != severity:
             continue
         relevant = c.target not in attached or c.target in in_scope
         by_word = relevant and word_triggered(c, question)
@@ -132,6 +132,12 @@ def triggered_block_constraints(onto: Ontology, question: str, used_fields: List
         if by_word or by_use:
             out.append(c)
     return out
+
+
+def owed_caveats(onto: Ontology, question: str, used_fields: List[Field], used_entities: Set[str]) -> List[dict]:
+    """`info` constraints that apply to a question the same way block ones do: the answer must mention them."""
+    return [{"id": c.id, "description": " ".join(c.description.split())}
+            for c in triggered_block_constraints(onto, question, used_fields, used_entities, severity="info")]
 
 
 class OntologyService:

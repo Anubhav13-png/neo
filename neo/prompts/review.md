@@ -9,7 +9,7 @@ Check:
 - Does the model answer this exact question (right form, universe, rows, measure, time window)?
 - Are the fields the ones whose terms match the question's concepts? Are joins and grain right (no double counting)?
 - Are units converted, and missing values handled? Are the applicable block constraints honoured?
-- For scenarios: one-period fields, the action scaled across decades, a baseline next to the result?
+- For what-if questions: the action applied to each row's own numbers, a baseline next to the result?
 - Is the result plausible (an empty set or a zero count may mean a wrong text value)?
 
 If the model is right, reply {"verdict": "ok"}.

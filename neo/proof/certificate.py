@@ -111,6 +111,28 @@ def render(question: str, raw: dict, proof: dict, provenance: dict, model_notes:
         if tu:
             L.append("- Units of the result: " + ", ".join(f"{k}: {v}" for k, v in tu.items()))
 
+    if raw.get("form") == "plan":
+        L += ["", "### Plan: each part proved on its own, then combined exactly"]
+        nodes = proof.get("nodes") or {}
+        for nid, node in (raw.get("nodes") or {}).items():
+            np = nodes.get(nid) or {}
+            L.append(f"- **{nid}** ({np.get('status', '?')}): {node.get('interpretation', '')}")
+            L.append(f"  - Universe `{(node.get('universe') or {}).get('entity')}`, rows {_code(node.get('rows', 'True'))}, "
+                     f"value {_code((node.get('target') or {}).get('expr'))} = **{_cell(np.get('answer'))}** over "
+                     f"{np.get('eligible_rows', '?')} eligible rows"
+                     + (f"; self-check {'matches' if (np.get('self_check') or {}).get('matches') else 'n/a'}"))
+        for k, v in ((raw.get("combine") or {}).get("columns") or {}).items():
+            L.append(f"- Combine {k} := {_code(v)} = **{_cell((proof.get('answer') or {}).get(k))}**")
+
+    fid = proof.get("fidelity") or {}
+    if fid.get("results"):
+        L += ["", f"### What the question requires, checked against the model ({fid.get('status')})"]
+        for r in fid["results"]:
+            node = f" [{r['node']}]" if r.get("node") else ""
+            L.append(f"- {r['id']}{node} {r['kind']}: {r['text']} → **{r['result']}**"
+                     + (f" — {r['detail']}" if r.get("detail") else "")
+                     + (f" ({r['symbolic']})" if r.get("symbolic") else ""))
+
     g = raw.get("grounding") or {}
     if g:
         L += ["", "### Ontology grounding"]

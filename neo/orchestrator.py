@@ -1,12 +1,17 @@
 """The orchestrator: one durable workflow per question, wiring every service together.
 
-  pin        snapshot of the lake, ontology version, rule versions (stored with the run)
-  retrieve   the part of the ontology the question needs; clarification if nothing links
-  formalize  LLM writes the model -> validator -> prover; errors go back to the LLM (repair loop)
-  review     LLM re-reads its model and the result; a revision is re-validated and re-proved
-  certify    certificate rendered by code (full, and an LLM-safe version without row data)
-  answer     LLM writes the answer from the LLM-safe certificate only
-  route      human review queue when the answer is not a clean proof or is high impact
+  pin          snapshot of the lake, ontology version, rule versions (stored with the run)
+  retrieve     the part of the ontology the question needs; clarification if nothing links
+  requirements a second LLM, which never sees the model, lists what the question needs (verify/fidelity.py)
+  formalize    LLM writes the model (or a plan of small models) -> validator -> prover -> fidelity check against
+               the requirements; errors go back to the LLM (repair loop)
+  review       LLM re-reads its model and the result; a revision is re-validated, re-proved and re-checked
+  certify      certificate rendered by code (full, and an LLM-safe version without row data), plus the values the
+               answer may cite
+  answer       LLM writes the answer with numbers as slots; the answer check verifies every claim and sends
+               failures back (verify/answer.py)
+  ledger       one row per claim (question, model, answer) and one Lean run over the claim theorems
+  route        human review queue when the answer is not a clean proof, a requirement is unmet, or high impact
 Every step is checkpointed in the run store, so `resume(run_id)` continues after a crash, and `replay(run_id)`
 re-proves a stored model on its pinned snapshot without any LLM.
 """
@@ -29,20 +34,27 @@ from .lake.engines import make_engine
 from .llm.gateway import LLMGateway
 from .llm.providers import LLMError
 from .observability import Tracer
-from .ontology.service import OntologyService
+from .ontology.service import OntologyService, owed_caveats
 from .ontology.store import make_store
 from .proof.certificate import render
+from .proof.plan import node_models, prove_plan
 from .proof.prover import ProofError, Prover
 from .rules import RuleRegistry
 from .runs import RunStore
 from .semantic.validator import ValidationContext, validate
 from .util import extract_json, now_iso
+from .verify import ledger as claim_ledger
+from .verify.answer import AnswerCheck, finalize, parse_reply
+from .verify.fidelity import Fidelity, parse_requirements, summary as fidelity_summary
+from .verify.values import catalog as value_catalog, llm_section
 
 PROMPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
 ROLE = """You turn business questions into formal models over the company's data, grounded in its ontology.
 You never compute answers and never see raw data. You write a model; a validator checks it against the ontology,
 the asker's access rights, units and approved rules; a compiler runs it as exact SQL inside the data lake; Z3 and an
 independent recomputation prove the result."""
+REQ_ROLE = """You read business questions and state precisely what a correct answer must respect, as small claims a
+program can check. You never write the model that answers the question and never see data."""
 
 
 def prompt(name: str, **values) -> str:
@@ -159,23 +171,28 @@ class Neo:
                                                                                       engine, snapshot, run_id))
             if retrieval["needs_clarification"]:
                 raise _Stop("needs_clarification", clarification=retrieval["clarification"])
+            reqs = self._step(run_id, "requirements", tracer, lambda: self._requirements(
+                question, principal, retrieval, run_id))
             system = "\n\n".join([ROLE, self.manual, "## Functions\n" + DOCS, retrieval["briefing"]])
             formal = self._step(run_id, "formalize", tracer, lambda: self._formalize(
-                onto, question, principal, engine, snapshot, system, run_id))
+                onto, question, principal, engine, snapshot, system, run_id, reqs["requirements"]))
             if formal.get("needs_approval"):
                 raise _Stop("needs_approval", raw=formal["raw"], reasons=[f"needs approval: {formal['needs_approval']}"])
             if formal.get("failed"):
                 raise _Stop("no_model", errors=formal["errors"], attempts=formal["attempts"])
             final = self._step(run_id, "review", tracer, lambda: self._review(
-                onto, question, principal, engine, snapshot, system, formal, run_id))
+                onto, question, principal, engine, snapshot, system, formal, run_id, reqs["requirements"]))
             raw, proof = final["raw"], final["proof"]
             certs = self._step(run_id, "certify", tracer, lambda: self._certify(
                 onto, question, principal, snapshot, raw, proof, run_id))
-            answer = self._step(run_id, "answer", tracer, lambda: self._answer(question, principal, raw, certs, run_id))
+            answer = self._step(run_id, "answer", tracer, lambda: self._answer(question, principal, raw, proof,
+                                                                                certs, run_id))
+            ledger = self._step(run_id, "ledger", tracer, lambda: claim_ledger.build(reqs, proof, answer, self.cfg))
             reasons = self._step(run_id, "route", tracer, lambda: self._route(onto, question, principal, snapshot,
                                                                                raw, proof, run_id))
             status = proof["status"]
-            result = Result(run_id, question, user, status, answer["text"], certs["full"], proof, raw,
+            cert = certs["full"] + ("\n\n" + ledger["markdown"] if ledger.get("markdown") else "")
+            result = Result(run_id, question, user, status, answer["text"], cert, proof, raw,
                             reasons["reasons"], attempts=formal["attempts"])
         except _Stop as stop:
             info = stop.info
@@ -204,28 +221,82 @@ class Neo:
         return {"needs_clarification": r.needs_clarification, "clarification": r.clarification,
                 "summary": r.summary(), "briefing": "" if r.needs_clarification else OntologyService.render(onto, r)}
 
-    def _validate_and_prove(self, raw, onto, question, principal, engine, snapshot, run_id):
-        """(proof, errors, needs_approval, model)."""
-        res = validate(raw, self._ctx(onto, question, principal, snapshot))
-        for d in res.access_denied:
-            self.audit.append("access_denied", principal.id, run_id=run_id, detail=d)
-        if res.errors:
-            for e in res.errors[:5]:
-                self.runs.curate("validator_error", e.split(":")[0][:120], e, run_id)
-            return None, res.errors, None, None
-        model = res.model
-        if model.form == "not_expressible":
-            return {"status": "not_expressible", "form": "not_expressible", "answer": None,
-                    "answer_summary": model.interpretation, "verification": [], "self_check": {"matches": None},
-                    "evidence": {}}, [], None, model
-        if model.needs_approval:
-            return None, [], model.needs_approval, model
+    def _requirements(self, question, principal, retrieval, run_id) -> dict:
+        if not self.cfg["pipeline"].get("requirements", True) or not self.gateway.routes("requirements"):
+            return {"status": "skipped", "requirements": [],
+                    "note": "the requirements writer is not configured (llm.tasks.requirements)"}
+        system = "\n\n".join([REQ_ROLE, "## Functions\n" + DOCS, retrieval["briefing"]])
         try:
-            proof = Prover(onto, model, engine, self.cfg, self.rules).run()
+            reply = self.gateway.chat("requirements", system, [{"role": "user", "content": prompt(
+                "requirements", QUESTION=question)}], principal, run_id)
+        except LLMError as e:
+            return {"status": "failed", "requirements": [], "note": f"the requirements writer failed: {e}"}
+        reqs, problems = parse_requirements(extract_json(reply))
+        status = "listed" if reqs else ("empty" if not problems else "failed")
+        return {"status": status, "requirements": reqs, "problems": problems,
+                "note": "; ".join(problems) or ("" if reqs else "the requirements writer listed nothing")}
+
+    def _models(self, raw, onto, question, principal, snapshot):
+        """Validated models: {"": model}, or {"N1": model, ...} for a plan. (models, errors, warnings, denied,
+        needs_approval)."""
+        ctx = self._ctx(onto, question, principal, snapshot)
+        if isinstance(raw, dict) and raw.get("form") == "plan":
+            errors: List[str] = []
+            if not isinstance(raw.get("interpretation"), str) or len(raw["interpretation"].strip()) < 10:
+                errors.append("`interpretation` must restate precisely, in a sentence, what is being asked.")
+            nodes, shape = node_models(raw)
+            errors += shape
+            models, warnings, denied, approval = {}, [], [], None
+            for nid, node in nodes.items():
+                res = validate(node, ctx)
+                errors += [f"node {nid}: {e}" for e in res.errors]
+                warnings += [f"node {nid}: {w}" for w in res.warnings]
+                denied += res.access_denied
+                if res.model is not None:
+                    models[nid] = res.model
+                    approval = approval or res.model.needs_approval
+            return models, errors, warnings, denied, approval
+        res = validate(raw, ctx)
+        return ({"": res.model} if res.model else {}), res.errors, res.warnings, res.access_denied, \
+            (res.model.needs_approval if res.model else None)
+
+    def _validate_and_prove(self, raw, onto, question, principal, engine, snapshot, run_id, requirements=None):
+        """(proof, errors, needs_approval, models, fidelity errors)."""
+        models, errors, warnings, denied, approval = self._models(raw, onto, question, principal, snapshot)
+        for d in denied:
+            self.audit.append("access_denied", principal.id, run_id=run_id, detail=d)
+        if errors:
+            for e in errors[:5]:
+                self.runs.curate("validator_error", e.split(":")[0][:120], e, run_id)
+            return None, errors, None, None, []
+        single = models.get("")
+        if single is not None and single.form == "not_expressible":
+            return {"status": "not_expressible", "form": "not_expressible", "answer": None,
+                    "answer_summary": single.interpretation, "verification": [], "self_check": {"matches": None},
+                    "evidence": {}}, [], None, models, []
+        if approval:
+            return None, [], approval, models, []
+        try:
+            if single is not None:
+                provers = {"": Prover(onto, single, engine, self.cfg, self.rules)}
+                proof = provers[""].run()
+            else:
+                provers = {nid: Prover(onto, m, engine, self.cfg, self.rules, nested=True) for nid, m in models.items()}
+                proof = prove_plan(raw, provers, self.cfg)
         except ProofError as e:
-            return None, [f"The model could not be executed or proved: {e}"], None, model
-        proof["warnings"] = res.warnings
-        return proof, [], None, model
+            return None, [f"The model could not be executed or proved: {e}"], None, models, []
+        proof["warnings"] = warnings
+        fid_errors: List[str] = []
+        if requirements:
+            fid = Fidelity(onto, requirements, self.cfg)
+            results = []
+            for nid, m in models.items():
+                r, e = fid.run(m, provers[nid], node=nid, plan_node=bool(nid))
+                results += r
+                fid_errors += e
+            proof["fidelity"] = {"results": results, "status": fidelity_summary(results),
+                                 "lean_goals": fid.goals.items, "skipped": fid.goals.skipped}
+        return proof, [], None, models, fid_errors
 
     @staticmethod
     def formalize_prompt(question: str, principal: Principal) -> str:
@@ -233,29 +304,40 @@ class Neo:
         return prompt("formalize", QUESTION=question, USER=principal.name, CLEARANCE=principal.clearance,
                       POLICIES=(" — rows are limited by policy:" + pol) if pol else "")
 
-    def _formalize(self, onto, question, principal, engine, snapshot, system, run_id) -> dict:
+    def _formalize(self, onto, question, principal, engine, snapshot, system, run_id, requirements=None) -> dict:
         messages = [{"role": "user", "content": self.formalize_prompt(question, principal)}]
         errors: List[str] = []
         max_attempts = self.cfg["pipeline"]["max_repairs"] + 1
         for n in range(1, max_attempts + 1):
             reply = self.gateway.chat("formalize", system, messages, principal, run_id)
             raw = extract_json(reply)
+            fid_errors: List[str] = []
             if raw is None:
                 proof, errors, approval = None, ["The reply did not contain a JSON object. Reply with only the model."], None
             else:
-                proof, errors, approval, _ = self._validate_and_prove(raw, onto, question, principal, engine,
-                                                                      snapshot, run_id)
-            self.runs.write(run_id, f"attempts/attempt_{n}.json", {"model": raw, "errors": errors}, overwrite=True)
+                proof, errors, approval, _, fid_errors = self._validate_and_prove(
+                    raw, onto, question, principal, engine, snapshot, run_id, requirements)
+            if proof is not None and fid_errors and n < max_attempts:
+                self.runs.write(run_id, f"attempts/attempt_{n}.json", {"model": raw, "errors": fid_errors,
+                                                                        "fidelity": proof.get("fidelity")},
+                                overwrite=True)
+                messages += [{"role": "assistant", "content": reply},
+                             {"role": "user", "content": prompt("fidelity_repair",
+                                                                ERRORS="\n".join(f"- {e}" for e in fid_errors))}]
+                continue
+            self.runs.write(run_id, f"attempts/attempt_{n}.json", {"model": raw, "errors": errors,
+                                                                    "fidelity": (proof or {}).get("fidelity")},
+                            overwrite=True)
             if approval:
                 return {"raw": raw, "needs_approval": approval, "attempts": n}
             if proof is not None:
-                return {"raw": raw, "proof": proof, "attempts": n, "messages": messages + [{"role": "assistant",
-                                                                                            "content": reply}]}
+                return {"raw": raw, "proof": proof, "attempts": n, "fidelity_errors": fid_errors,
+                        "messages": messages + [{"role": "assistant", "content": reply}]}
             messages += [{"role": "assistant", "content": reply},
                          {"role": "user", "content": prompt("repair", ERRORS="\n".join(f"- {e}" for e in errors))}]
         return {"failed": True, "errors": errors, "attempts": max_attempts}
 
-    def _review(self, onto, question, principal, engine, snapshot, system, formal, run_id) -> dict:
+    def _review(self, onto, question, principal, engine, snapshot, system, formal, run_id, requirements=None) -> dict:
         raw, proof = formal["raw"], formal["proof"]
         if not self.cfg["pipeline"].get("review", True) or proof["status"] == "not_expressible":
             return {"raw": raw, "proof": proof, "verdict": "skipped"}
@@ -265,40 +347,76 @@ class Neo:
         verdict = extract_json(reply) or {"verdict": "ok", "note": "review reply was not JSON; kept the model"}
         out = {"raw": raw, "proof": proof, "verdict": verdict.get("verdict", "ok"), "issues": verdict.get("issues", [])}
         if out["verdict"] == "revise" and isinstance(verdict.get("model"), dict):
-            p2, errors, approval, _ = self._validate_and_prove(verdict["model"], onto, question, principal, engine,
-                                                               snapshot, run_id)
-            if p2 is not None:
+            p2, errors, approval, _, fid_errors = self._validate_and_prove(
+                verdict["model"], onto, question, principal, engine, snapshot, run_id, requirements)
+            if p2 is not None and (not fid_errors or formal.get("fidelity_errors")):
                 out.update(raw=verdict["model"], proof=p2, applied=True)
+            elif p2 is not None:
+                out.update(applied=False, reason=["the revision does not meet the requirements"] + fid_errors[:4])
             else:
                 out.update(applied=False, reason=errors[:5] or [f"needs approval: {approval}"])
         return out
 
     def _certify(self, onto, question, principal, snapshot, raw, proof, run_id) -> dict:
-        res = validate(raw, self._ctx(onto, question, principal, snapshot))
-        model = res.model
-        joins, policies = {}, {}
-        if model and model.universe:
-            joins = {j.alias: j.cardinality for j in model.universe.joins}
-            policies = {e: principal.row_policies[e] for e in set(model.universe.aliases.values())
-                        if e in principal.row_policies}
+        models, *_ = self._models(raw, onto, question, principal, snapshot)
+        joins, policies, entities, used = {}, {}, set(), []
+        for m in models.values():
+            if m and m.universe:
+                joins.update({j.alias: j.cardinality for j in m.universe.joins})
+                ents = set(m.universe.aliases.values())
+                entities |= ents
+                policies.update({e: principal.row_policies[e] for e in ents if e in principal.row_policies})
+                used += [f for _, f in m.used_fields]
         cited = {c["source"][5:] for c in raw.get("constraints") or [] if str(c.get("source", "")).startswith("rule:")}
         prov = {"snapshot": {"id": snapshot.id, "tables": snapshot.as_dict()}, "ontology_version": onto.version,
                 "rules": {k: v for k, v in self.rules.pinned().items() if k in cited}, "user": principal.id,
                 "llm": self.gateway.describe("formalize"), "run_id": run_id, "joins": joins, "row_policies": policies}
-        notes = model.notes if model else {}
+        single = models.get("")
+        notes = single.notes if single else {}
+        plan_units = {nid: ((m.notes or {}).get("target_units") or {}).get("value") for nid, m in models.items() if nid}
+        values = value_catalog(proof, notes, plan_units)
         allow = self.cfg["governance"].get("allow_row_samples_to_llm", False)
         return {"full": render(question, raw, proof, prov, notes),
                 "llm": render(question, raw, proof, prov, notes, for_llm=True, allow_rows=allow),
-                "entities": sorted(set(model.universe.aliases.values())) if model and model.universe else []}
+                "values": values, "caveats": owed_caveats(onto, question, used, entities),
+                "entities": sorted(entities)}
 
-    def _answer(self, question, principal, raw, certs, run_id) -> dict:
-        text = self.gateway.chat("answer", ROLE, [{"role": "user", "content": prompt(
-            "answer", QUESTION=question, CERTIFICATE=certs["llm"])}], principal, run_id)
-        return {"text": text}
+    def _answer(self, question, principal, raw, proof, certs, run_id) -> dict:
+        values, owed = certs.get("values") or {}, certs.get("caveats") or []
+        caveats = ("Caveats this answer must mention (list each as a caveat claim):\n" +
+                   "\n".join(f"- {o['id']}: {o['description']}" for o in owed)) if owed else ""
+        messages = [{"role": "user", "content": prompt("answer", QUESTION=question, CERTIFICATE=certs["llm"],
+                                                       VALUES=llm_section(values), CAVEATS=caveats)}]
+        reply = self.gateway.chat("answer", ROLE, messages, principal, run_id)
+        if not self.cfg["pipeline"].get("answer_check", True):
+            return {"text": reply, "checked": False}
+        context = json.dumps(raw, default=str) + " " + str(raw.get("interpretation", ""))
+        checker = AnswerCheck(values, question, context, certs["llm"] + "\n" + llm_section(values),
+                              (proof.get("fidelity") or {}).get("results"), owed, self.cfg)
+        report = checker.check(parse_reply(reply))
+        drafts = [{"text": report["text"], "problems": report["problems"]}]
+        for _ in range(int(self.cfg["pipeline"].get("answer_repairs", 2))):
+            if not report["problems"]:
+                break
+            messages += [{"role": "assistant", "content": reply},
+                         {"role": "user", "content": prompt("answer_repair", PROBLEMS="\n".join(
+                             f"- {x}" for x in report["problems"]))}]
+            try:
+                reply = self.gateway.chat("answer", ROLE, messages, principal, run_id)
+            except LLMError as e:
+                drafts.append({"text": "", "problems": [f"the answer writer failed: {e}"]})
+                break
+            report = checker.check(parse_reply(reply))
+            drafts.append({"text": report["text"], "problems": report["problems"]})
+        final = finalize(report, {o["id"]: o for o in owed})
+        return {"text": final["text"], "checked": True, "format": final["format"], "claims": final["claims"],
+                "lean_goals": final["lean_goals"], "drafts": drafts, "removed": final["removed"],
+                "added_caveats": final["added_caveats"]}
 
     def _route(self, onto, question, principal, snapshot, raw, proof, run_id) -> dict:
         certs = self.runs.load_step(run_id, "certify") or {}
         reasons = review_reasons(self.cfg, proof, onto, raw, certs.get("entities", []))
+        reasons += claim_ledger.review_reasons(self.runs.load_step(run_id, "ledger") or {})
         if reasons:
             self.runs.enqueue_review(run_id, reasons)
         return {"reasons": reasons}
@@ -335,12 +453,17 @@ class Neo:
             snapshot = Snapshot.from_dict(run["snapshot"]["tables"])
             version = run["ontology_version"]
         onto = self.ontology.load(version, snapshot)
-        res = validate(raw, self._ctx(onto, run["question"], principal, snapshot))
-        if res.errors:
-            return {"run_id": run_id, "reproduced": False, "errors": res.errors}
-        if res.model.form == "not_expressible":
+        models, errors, *_ = self._models(raw, onto, run["question"], principal, snapshot)
+        if errors:
+            return {"run_id": run_id, "reproduced": False, "errors": errors}
+        engine = self.engine.bind(snapshot)
+        if "" in models and models[""].form == "not_expressible":
             return {"run_id": run_id, "reproduced": True, "status": "not_expressible"}
-        proof = Prover(onto, res.model, self.engine.bind(snapshot), self.cfg, self.rules).run()
+        if "" in models:
+            proof = Prover(onto, models[""], engine, self.cfg, self.rules).run()
+        else:
+            proof = prove_plan(raw, {nid: Prover(onto, m, engine, self.cfg, self.rules, nested=True)
+                                     for nid, m in models.items()}, self.cfg)
         same = json.dumps(proof.get("answer"), sort_keys=True, default=str) == \
             json.dumps((old or {}).get("answer"), sort_keys=True, default=str)
         changed_rules = [k for k, v in run["rules"].items() if self.rules.pinned().get(k, {}).get("hash") != v.get("hash")]

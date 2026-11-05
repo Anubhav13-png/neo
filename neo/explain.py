@@ -24,8 +24,15 @@ STEPS = [
                                     "part of the ontology as the LLM's briefing."),
     ("ontology", "Ontology at work", False, "Which ontology terms, fields, rules and constraints this question "
                                             "touched, why each constraint applied, and how the model handled it."),
-    ("formalize", "Formalize", True, "The LLM writes the question as a JSON model in ontology vocabulary. The "
-                                     "validator and prover check it; errors go back to the LLM (repair loop)."),
+    ("requirements", "Requirements", True, "A second LLM, which never sees the model, lists what the question "
+                                           "needs: whose rows, which filters, what is computed. Each one is "
+                                           "checked against the model later."),
+    ("formalize", "Formalize", True, "The LLM writes the question as a JSON model in ontology vocabulary (or a plan "
+                                     "of small models). The validator, prover and fidelity check test it; errors go "
+                                     "back to the LLM (repair loop)."),
+    ("fidelity", "Fidelity check", False, "Does the model mean what was asked? Each requirement is checked against "
+                                          "the model: lake counts of rows the model keeps that the question "
+                                          "excludes (and the reverse), Z3 and Lean for the filters."),
     ("math", "Constraints, term by term", False, "The model as mathematics. Every statement is read in plain words, "
                                                   "and every symbol in it is explained: where it comes from and "
                                                   "what it means."),
@@ -40,7 +47,13 @@ STEPS = [
     ("review", "LLM review", True, "The LLM re-reads its model and the result and may revise the model once."),
     ("certify", "Certify", False, "Code renders the proof certificate: a full one for people, an LLM-safe one "
                                   "without row data."),
-    ("answer", "Answer", True, "The LLM writes the answer from the LLM-safe certificate only."),
+    ("answer", "Answer", True, "The LLM writes the answer from the LLM-safe certificate only, with numbers as slots "
+                               "that neo fills from the proved values."),
+    ("answer_check", "Answer check", False, "Every number and claim in the written answer is checked by a program. "
+                                            "Failures go back to the LLM; what still fails is removed, and owed "
+                                            "caveats are added."),
+    ("ledger", "Claim ledger", False, "One row per claim (question, model, answer): who made it, what checked it, "
+                                      "the result. Lean checks the claim theorems."),
     ("route", "Route", False, "Send to human review if the answer is not a clean proof, approximate or high impact."),
 ]
 
@@ -314,6 +327,7 @@ def explain(neo, run_id: str) -> dict:
     load = lambda name: neo.runs.load_step(run_id, name)
     retrieve, formalize, review = load("retrieve"), load("formalize"), load("review")
     certify, answer, route = load("certify"), load("answer"), load("route")
+    requirements, ledger = load("requirements"), load("ledger")
     raw = (review or {}).get("raw") or (formalize or {}).get("raw") or neo.runs.read(run_id, "model.json")
     proof = (review or {}).get("proof") or (formalize or {}).get("proof") or neo.runs.read(run_id, "proof.json")
 
@@ -355,8 +369,12 @@ def explain(neo, run_id: str) -> dict:
                         "failed": bool((formalize or {}).get("failed")),
                         "errors": (formalize or {}).get("errors", [])}
     out["model"] = raw
+    if requirements is not None:
+        out["requirements"] = requirements
 
-    if raw:
+    if raw and raw.get("form") == "plan":
+        _explain_plan(neo, run, principal, raw, out, proof or {}, (retrieve or {}).get("summary") or {})
+    elif raw:
         _explain_model(neo, run, principal, raw, out, proof or {}, (retrieve or {}).get("summary") or {})
 
     if proof:
@@ -365,12 +383,20 @@ def explain(neo, run_id: str) -> dict:
                 "sensitivity", "warnings", "evidence", "seconds", "self_check", "interpretation", "explain", "lean")
         out["proof"] = {k: proof.get(k) for k in keep if k in proof}
         out["queries"] = proof.get("queries", [])
+        out["fidelity"] = proof.get("fidelity") or {"status": "not_checked", "results": []}
+        if proof.get("nodes"):
+            out["plan"] = {"nodes": proof["nodes"], "combine": (raw.get("combine") or {}).get("columns") or {},
+                           "models": raw.get("nodes") or {}}
     if review:
         out["review"] = {k: review.get(k) for k in ("verdict", "issues", "applied", "reason")}
     if certify:
         out["certify"] = {"full": certify.get("full", ""), "llm": certify.get("llm", "")}
     if answer:
         out["answer"] = answer.get("text", "")
+        out["answer_check"] = {k: answer.get(k) for k in ("checked", "format", "claims", "drafts", "removed",
+                                                           "added_caveats")}
+    if ledger:
+        out["ledger"] = {k: ledger.get(k) for k in ("rows", "lean", "summary")}
     elif run.get("state") == "finished":
         md = neo.runs.read(run_id, "answer.md", as_json=False) or ""
         out["answer"] = md.split("\n\n", 1)[-1].strip()
@@ -379,6 +405,30 @@ def explain(neo, run_id: str) -> dict:
         out["route"] = {"reasons": route.get("reasons", []), "review": rev[0] if rev else None}
     out["audit"] = _audit(neo, run_id)
     return out
+
+
+def _explain_plan(neo, run, principal, raw, out, proof, summary):
+    """A plan: each node explained as its own model, then merged (math and anatomy per node, columns once)."""
+    from .proof.plan import node_models
+    nodes, _ = node_models(raw)
+    merged = {"math": [], "anatomy": [], "columns": []}
+    seen = set()
+    for nid, node in nodes.items():
+        part: dict = {}
+        _explain_model(neo, run, principal, node, part, ((proof.get("nodes") or {}).get(nid) or {}), summary)
+        merged["math"].append({"label": f"Part {nid}", "html": html.escape(node.get("interpretation", "")), "note": ""})
+        merged["math"] += part.get("math") or []
+        merged["anatomy"] += [{**a, "label": f"{nid} · {a['label']}"} for a in part.get("anatomy") or []]
+        for c in part.get("columns") or []:
+            if c["name"] not in seen:
+                seen.add(c["name"])
+                merged["columns"].append(c)
+        for k in ("validate", "ontology_use"):
+            out.setdefault(k, part.get(k))
+    for name, e in ((raw.get("combine") or {}).get("columns") or {}).items():
+        merged["math"].append({"label": "Combine", "html": f"<b>{html.escape(name)}</b> = {html.escape(str(e))}",
+                               "note": "exact fractions over the parts' proved values"})
+    out.update(merged)
 
 
 def _explain_model(neo, run, principal, raw, out, proof, summary):

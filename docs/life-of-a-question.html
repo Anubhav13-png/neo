@@ -8,8 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-body { margin: 0; }
-*, *::before, *::after { box-sizing: border-box; }
 /* Layout: a sticky step index on the left, one reading column on the right; one colour per worker (code, LLM, lake, Z3, Lean). */
 :root {
   --bg: #f5f7fa; --surface: #ffffff; --ink: #172033; --muted: #556079; --line: #dfe4ec;
@@ -150,37 +148,36 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
 </style>
 </head>
 <body>
-
 <div class="wrap">
 <header class="intro">
   <span class="label">neo · question pipeline</span>
   <h1>Life of a question</h1>
-  <p class="lede">Everything that happens between pressing <b>Ask</b> and reading the answer, step by step, in plain words. The example throughout is a real run on your data: <i>“How many failed-bank deals happened in the 1980s?”</i>, asked as Admin.</p>
+  <p class="lede">Everything that happens between pressing <b>Ask</b> and reading the answer, step by step, in plain words. The example throughout is a real run on your data (jp_morgan.csv, 955 rows): <i>“How many failed-bank deals happened in the 1980s?”</i>, asked as Admin.</p>
 </header>
 
 <div class="glance" aria-label="The example run at a glance">
   <div><b>132</b><span>failed-bank deals in the 1980s</span></div>
   <div><b>955</b><span>deals in jp_morgan.csv</span></div>
   <div><b>Proved</b><span>Z3, then Lean re-checked it</span></div>
-  <div><b>Matched</b><span>independent recomputation</span></div>
-  <div><b>2.0 s</b><span>from Ask to answer</span></div>
+  <div><b>4 of 4</b><span>requirements met by the model</span></div>
+  <div><b>Every claim</b><span>in the answer checked</span></div>
 </div>
 
 <section class="idea" aria-labelledby="idea-h">
   <h2 id="idea-h">The one idea</h2>
-  <p>The language model never calculates anything. Its job is to rewrite your question as a precise <b>model</b>: a short recipe that says which rows to use and which formula to apply, written in the ontology's own names. Code checks the recipe. The data lake computes it with exact whole numbers. Z3 proves the result is the only one possible, and Lean checks Z3's work. At the end the model writes the answer in words, using only facts that code wrote down.</p>
+  <p>The language model never calculates anything. Its job is to rewrite your question as a precise <b>model</b>: a short recipe that says which rows to use and which formula to apply, written in the ontology's own names. Code checks the recipe. The data lake computes it with exact whole numbers. Z3 proves the result is the only one possible, and Lean checks Z3's work. A second, separate LLM writes down what the question requires, and code checks the model against each requirement. At the end an LLM writes the answer in words, and code checks every number and claim in it before you see it.</p>
   <div class="workers">
     <div class="worker"><span class="chip c-code">Code</span><p>neo's own program. The same input always gives the same output.</p></div>
-    <div class="worker"><span class="chip c-llm">LLM</span><p>Claude. Writes the model, reviews it, writes the final text. Never sees data rows.</p></div>
-    <div class="worker"><span class="chip c-lake">Data lake</span><p>DuckDB over a frozen copy of your two tables: the deals CSV and FDIC history. Every number is calculated here.</p></div>
+    <div class="worker"><span class="chip c-llm">LLM</span><p>Claude, in three separate jobs: lists the question's requirements, writes the model, writes the answer. Never sees data rows, and every claim it makes is checked.</p></div>
+    <div class="worker"><span class="chip c-lake">Data lake</span><p>DuckDB over a frozen copy of your one table: jp_morgan.csv, 955 deals. Every number is calculated here.</p></div>
     <div class="worker"><span class="chip c-z3">Z3</span><p>A solver. Proves an answer is the only possible one, finds best values and clashes.</p></div>
-    <div class="worker"><span class="chip c-lean">Lean</span><p>A proof checker with a small trusted core. Re-checks what Z3 decided.</p></div>
+    <div class="worker"><span class="chip c-lean">Lean</span><p>A proof checker with a small trusted core. Re-checks what Z3 decided, and every small claim: rounding, comparisons, filters.</p></div>
   </div>
 </section>
 
 <figure class="diagram">
   <div class="scroll">
-  <svg class="flow" viewBox="0 0 1000 352" role="img" aria-label="Fifteen steps in four phases. Understand: steps 1 to 3 by code. Formalise: step 4 by the LLM, step 5 by code; if any check fails, the errors go back to the LLM. Compute and prove: compile, lake, Z3, Lean, independent recomputation. Explain and deliver: LLM review, certificate, LLM answer, routing, saving.">
+  <svg class="flow" viewBox="0 0 1000 500" role="img" aria-label="Nineteen steps in four phases. Understand: steps 1 to 3 by code, step 4 a separate LLM lists the requirements. Formalise: step 5 by the LLM, step 6 by code; failures go back to the LLM. Compute and prove: compile, lake, Z3, Lean, independent recomputation, and the meaning check against the requirements, whose failures also go back. Explain and deliver: LLM review, certificate, LLM answer, the answer check whose failures go back to the answer writer, the claim ledger, routing, saving.">
     <defs>
       <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
       <marker id="ahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
@@ -189,48 +186,54 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <text class="ph" x="270" y="36">FORMALISE</text>
     <text class="ph" x="524" y="36">COMPUTE AND PROVE</text>
     <text class="ph" x="778" y="36">EXPLAIN AND DELIVER</text>
-
-    <g class="code"><rect x="16" y="56" width="206" height="42" rx="6"/><text class="sn" x="26" y="82">1</text><text class="sl" x="46" y="82">Freeze data and meaning</text></g>
+        <g class="code"><rect x="16" y="56" width="206" height="42" rx="6"/><text class="sn" x="26" y="82">1</text><text class="sl" x="46" y="82">Freeze data and meaning</text></g>
     <g class="code"><rect x="16" y="116" width="206" height="42" rx="6"/><text class="sn" x="26" y="142">2</text><text class="sl" x="46" y="142">Link words to ontology</text></g>
     <g class="code"><rect x="16" y="176" width="206" height="42" rx="6"/><text class="sn" x="26" y="202">3</text><text class="sl" x="46" y="202">Build the briefing</text></g>
-    <line class="ar" x1="119" y1="98" x2="119" y2="114" marker-end="url(#ah)"/>
+    <g class="llm"><rect x="16" y="236" width="206" height="42" rx="6"/><text class="sn" x="26" y="262">4</text><text class="sl" x="46" y="262">List the requirements</text><text class="st" x="212" y="262" text-anchor="end">LLM</text></g>
+    <g class="llm"><rect x="270" y="56" width="206" height="42" rx="6"/><text class="sn" x="280" y="82">5</text><text class="sl" x="300" y="82">Write the model</text><text class="st" x="466" y="82" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="270" y="116" width="206" height="42" rx="6"/><text class="sn" x="280" y="142">6</text><text class="sl" x="300" y="142">Check the model</text></g>
+    <g class="code"><rect x="524" y="56" width="206" height="42" rx="6"/><text class="sn" x="534" y="82">7</text><text class="sl" x="554" y="82">Compile to exact SQL</text></g>
+    <g class="lake"><rect x="524" y="116" width="206" height="42" rx="6"/><text class="sn" x="534" y="142">8</text><text class="sl" x="554" y="142">Compute in the lake</text><text class="st" x="720" y="142" text-anchor="end">lake</text></g>
+    <g class="z3"><rect x="524" y="176" width="206" height="42" rx="6"/><text class="sn" x="534" y="202">9</text><text class="sl" x="554" y="202">Prove with Z3</text><text class="st" x="720" y="202" text-anchor="end">Z3</text></g>
+    <g class="lean"><rect x="524" y="236" width="206" height="42" rx="6"/><text class="sn" x="534" y="262">10</text><text class="sl" x="560" y="262">Re-check with Lean</text><text class="st" x="720" y="262" text-anchor="end">Lean</text></g>
+    <g class="code"><rect x="524" y="296" width="206" height="42" rx="6"/><text class="sn" x="534" y="322">11</text><text class="sl" x="560" y="322">Recompute another way</text></g>
+    <g class="z3"><rect x="524" y="356" width="206" height="42" rx="6"/><text class="sn" x="534" y="382">12</text><text class="sl" x="560" y="382">Check the meaning</text><text class="st" x="720" y="382" text-anchor="end">Z3</text></g>
+    <g class="llm"><rect x="778" y="56" width="206" height="42" rx="6"/><text class="sn" x="788" y="82">13</text><text class="sl" x="814" y="82">Review the model</text><text class="st" x="974" y="82" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="778" y="116" width="206" height="42" rx="6"/><text class="sn" x="788" y="142">14</text><text class="sl" x="814" y="142">Write the certificate</text></g>
+    <g class="llm"><rect x="778" y="176" width="206" height="42" rx="6"/><text class="sn" x="788" y="202">15</text><text class="sl" x="814" y="202">Write the answer</text><text class="st" x="974" y="202" text-anchor="end">LLM</text></g>
+    <g class="code"><rect x="778" y="236" width="206" height="42" rx="6"/><text class="sn" x="788" y="262">16</text><text class="sl" x="814" y="262">Check the answer</text></g>
+    <g class="lean"><rect x="778" y="296" width="206" height="42" rx="6"/><text class="sn" x="788" y="322">17</text><text class="sl" x="814" y="322">Claim ledger</text><text class="st" x="974" y="322" text-anchor="end">Lean</text></g>
+    <g class="code"><rect x="778" y="356" width="206" height="42" rx="6"/><text class="sn" x="788" y="382">18</text><text class="sl" x="814" y="382">Route for review</text></g>
+    <g class="code"><rect x="778" y="416" width="206" height="42" rx="6"/><text class="sn" x="788" y="442">19</text><text class="sl" x="814" y="442">Save and audit</text></g>
+        <line class="ar" x1="119" y1="98" x2="119" y2="114" marker-end="url(#ah)"/>
     <line class="ar" x1="119" y1="158" x2="119" y2="174" marker-end="url(#ah)"/>
-
-    <g class="llm"><rect x="270" y="56" width="206" height="42" rx="6"/><text class="sn" x="280" y="82">4</text><text class="sl" x="300" y="82">Write the model</text><text class="st" x="466" y="82" text-anchor="end">LLM</text></g>
-    <g class="code"><rect x="270" y="116" width="206" height="42" rx="6"/><text class="sn" x="280" y="142">5</text><text class="sl" x="300" y="142">Check the model</text></g>
+    <line class="ar" x1="119" y1="218" x2="119" y2="234" marker-end="url(#ah)"/>
     <line class="ar" x1="373" y1="98" x2="373" y2="114" marker-end="url(#ah)"/>
-
-    <g class="code"><rect x="524" y="56" width="206" height="42" rx="6"/><text class="sn" x="534" y="82">6</text><text class="sl" x="554" y="82">Compile to exact SQL</text></g>
-    <g class="lake"><rect x="524" y="116" width="206" height="42" rx="6"/><text class="sn" x="534" y="142">7</text><text class="sl" x="554" y="142">Compute in the lake</text><text class="st" x="720" y="142" text-anchor="end">lake</text></g>
-    <g class="z3"><rect x="524" y="176" width="206" height="42" rx="6"/><text class="sn" x="534" y="202">8</text><text class="sl" x="554" y="202">Prove with Z3</text><text class="st" x="720" y="202" text-anchor="end">Z3</text></g>
-    <g class="lean"><rect x="524" y="236" width="206" height="42" rx="6"/><text class="sn" x="534" y="262">9</text><text class="sl" x="554" y="262">Re-check with Lean</text><text class="st" x="720" y="262" text-anchor="end">Lean</text></g>
-    <g class="code"><rect x="524" y="296" width="206" height="42" rx="6"/><text class="sn" x="534" y="322">10</text><text class="sl" x="554" y="322">Recompute another way</text></g>
     <line class="ar" x1="627" y1="98" x2="627" y2="114" marker-end="url(#ah)"/>
     <line class="ar" x1="627" y1="158" x2="627" y2="174" marker-end="url(#ah)"/>
     <line class="ar" x1="627" y1="218" x2="627" y2="234" marker-end="url(#ah)"/>
     <line class="ar" x1="627" y1="278" x2="627" y2="294" marker-end="url(#ah)"/>
-
-    <g class="llm"><rect x="778" y="56" width="206" height="42" rx="6"/><text class="sn" x="788" y="82">11</text><text class="sl" x="812" y="82">Review the model</text><text class="st" x="974" y="82" text-anchor="end">LLM</text></g>
-    <g class="code"><rect x="778" y="116" width="206" height="42" rx="6"/><text class="sn" x="788" y="142">12</text><text class="sl" x="812" y="142">Write the certificate</text></g>
-    <g class="llm"><rect x="778" y="176" width="206" height="42" rx="6"/><text class="sn" x="788" y="202">13</text><text class="sl" x="812" y="202">Write the answer</text><text class="st" x="974" y="202" text-anchor="end">LLM</text></g>
-    <g class="code"><rect x="778" y="236" width="206" height="42" rx="6"/><text class="sn" x="788" y="262">14</text><text class="sl" x="812" y="262">Route for review</text></g>
-    <g class="code"><rect x="778" y="296" width="206" height="42" rx="6"/><text class="sn" x="788" y="322">15</text><text class="sl" x="812" y="322">Save and audit</text></g>
+    <line class="ar" x1="627" y1="338" x2="627" y2="354" marker-end="url(#ah)"/>
     <line class="ar" x1="881" y1="98" x2="881" y2="114" marker-end="url(#ah)"/>
     <line class="ar" x1="881" y1="158" x2="881" y2="174" marker-end="url(#ah)"/>
     <line class="ar" x1="881" y1="218" x2="881" y2="234" marker-end="url(#ah)"/>
     <line class="ar" x1="881" y1="278" x2="881" y2="294" marker-end="url(#ah)"/>
-
-    <path class="ar" d="M222 197 H238 V70 H266" marker-end="url(#ah)"/>
+    <line class="ar" x1="881" y1="338" x2="881" y2="354" marker-end="url(#ah)"/>
+    <line class="ar" x1="881" y1="398" x2="881" y2="414" marker-end="url(#ah)"/>
+    <path class="ar" d="M222 257 H238 V70 H266" marker-end="url(#ah)"/>
     <path class="ar" d="M476 137 H500 V70 H520" marker-end="url(#ah)"/>
-    <path class="ar" d="M730 317 H754 V70 H774" marker-end="url(#ah)"/>
-
+    <path class="ar" d="M730 377 H754 V70 H774" marker-end="url(#ah)"/>
     <path class="loop" d="M373 158 V200 H254 V90 H266" marker-end="url(#ahl)"/>
-    <path class="loop" d="M524 200 H373"/>
-    <text class="lt" x="373" y="226" text-anchor="middle">a check fails: the errors go</text>
-    <text class="lt" x="373" y="241" text-anchor="middle">back to the LLM (up to 3 fixes)</text>
+    <path class="loop" d="M524 377 H500 V230 H373 V200"/>
+    <text class="lt" x="373" y="250" text-anchor="middle">a check or the meaning</text>
+    <text class="lt" x="373" y="265" text-anchor="middle">check fails: the reasons go</text>
+    <text class="lt" x="373" y="280" text-anchor="middle">back to the LLM (up to 3 fixes)</text>
+    <path class="loop" d="M984 257 H996 V197 H988" marker-end="url(#ahl)"/>
+    <text class="lt" x="881" y="482" text-anchor="middle">a claim fails the answer check: it goes back</text>
+    <text class="lt" x="881" y="497" text-anchor="middle">to the answer LLM (dashed loop, up to 2 fixes)</text>
   </svg>
   </div>
-  <figcaption>The whole run. Grey boxes are neo's own code; coloured boxes name the worker. If the check in step 5, or compiling or proving in steps 6 to 8, fails, the problems go back to the LLM to fix (dashed line).</figcaption>
+  <figcaption>The whole run. Grey boxes are neo's own code; coloured boxes name the worker. Dashed lines are repair loops: a failed check sends the exact reasons back to the LLM that made the mistake. Three LLM jobs (requirements, model, answer) are kept apart, and every claim each one makes is checked by code, Z3 or Lean.</figcaption>
 </figure>
 
 <div class="layout">
@@ -238,22 +241,26 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <div><div class="label">Understand</div><ol>
     <li><a href="#s1"><span>1</span><span>Freeze data and meaning</span></a></li>
     <li><a href="#s2"><span>2</span><span>Link words to the ontology</span></a></li>
-    <li><a href="#s3"><span>3</span><span>Build the briefing</span></a></li></ol></div>
+    <li><a href="#s3"><span>3</span><span>Build the briefing</span></a></li>
+    <li><a href="#s4"><span>4</span><span>List the requirements</span></a></li></ol></div>
   <div><div class="label">Formalise</div><ol>
-    <li><a href="#s4"><span>4</span><span>Write the model</span></a></li>
-    <li><a href="#s5"><span>5</span><span>Check the model</span></a></li></ol></div>
+    <li><a href="#s5"><span>5</span><span>Write the model</span></a></li>
+    <li><a href="#s6"><span>6</span><span>Check the model</span></a></li></ol></div>
   <div><div class="label">Compute and prove</div><ol>
-    <li><a href="#s6"><span>6</span><span>Compile to exact SQL</span></a></li>
-    <li><a href="#s7"><span>7</span><span>Compute in the lake</span></a></li>
-    <li><a href="#s8"><span>8</span><span>Prove with Z3</span></a></li>
-    <li><a href="#s9"><span>9</span><span>Re-check with Lean</span></a></li>
-    <li><a href="#s10"><span>10</span><span>Recompute another way</span></a></li></ol></div>
+    <li><a href="#s7"><span>7</span><span>Compile to exact SQL</span></a></li>
+    <li><a href="#s8"><span>8</span><span>Compute in the lake</span></a></li>
+    <li><a href="#s9"><span>9</span><span>Prove with Z3</span></a></li>
+    <li><a href="#s10"><span>10</span><span>Re-check with Lean</span></a></li>
+    <li><a href="#s11"><span>11</span><span>Recompute another way</span></a></li>
+    <li><a href="#s12"><span>12</span><span>Check the meaning</span></a></li></ol></div>
   <div><div class="label">Explain and deliver</div><ol>
-    <li><a href="#s11"><span>11</span><span>Review the model</span></a></li>
-    <li><a href="#s12"><span>12</span><span>Write the certificate</span></a></li>
-    <li><a href="#s13"><span>13</span><span>Write the answer</span></a></li>
-    <li><a href="#s14"><span>14</span><span>Route for review</span></a></li>
-    <li><a href="#s15"><span>15</span><span>Save and audit</span></a></li></ol></div>
+    <li><a href="#s13"><span>13</span><span>Review the model</span></a></li>
+    <li><a href="#s14"><span>14</span><span>Write the certificate</span></a></li>
+    <li><a href="#s15"><span>15</span><span>Write the answer</span></a></li>
+    <li><a href="#s16"><span>16</span><span>Check the answer</span></a></li>
+    <li><a href="#s17"><span>17</span><span>Claim ledger</span></a></li>
+    <li><a href="#s18"><span>18</span><span>Route for review</span></a></li>
+    <li><a href="#s19"><span>19</span><span>Save and audit</span></a></li></ol></div>
   <div class="extra"><div class="label">Reference</div><ol>
     <li><a href="#endings"><span>How a run can end</span></a></li>
     <li><a href="#glossary"><span>Words used here</span></a></li></ol></div>
@@ -273,9 +280,9 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <li><b>Starts the record.</b> It creates a run id and writes “question asked” to the audit log.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <table><tr><td>Run</td><td class="mono">run_20261103191750_8edc80a0</td></tr>
-    <tr><td>Data snapshot</td><td class="mono">snap_4a1cb2ceb8871c88</td></tr>
-    <tr><td>Ontology version</td><td class="mono">v0002-0b6222eb</td></tr></table>
+    <table><tr><td>Run</td><td class="mono">run_20261105105653_94112983</td></tr>
+    <tr><td>Data snapshot</td><td class="mono">snap_6044484e82ce6e90</td></tr>
+    <tr><td>Ontology version</td><td class="mono">v0003-ddf412f2</td></tr></table>
   </div>
   <p class="note">Why it matters: replaying this run next year gives the same answer, because every later step reloads exactly this snapshot and this ontology version.</p>
   <p class="saved">Saved: the run record and <code>var/audit.jsonl</code>.</p>
@@ -296,11 +303,11 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
       <tr><td>“failed bank”</td><td class="mono">term_failed_bank_deal</td><td>business term</td><td class="r">0.90</td></tr>
       <tr><td>“deals”</td><td class="mono">deal</td><td>entity (table)</td><td class="r">0.75</td></tr>
       <tr><td>“deal”</td><td class="mono">term_acquired_bank</td><td>business term (alias)</td><td class="r">0.75</td></tr>
-      <tr><td>“bank”</td><td class="mono">BANKS</td><td>column of the FDIC history</td><td class="r">0.75</td></tr>
+      <tr><td>“deal”</td><td class="mono">target_name, target_cert</td><td>columns (through their term)</td><td class="r">0.75</td></tr>
       <tr><td>similar wording</td><td class="mono">is_assisted_failed</td><td>column (a formula)</td><td class="r">0.56</td></tr>
       <tr><td>similar wording</td><td class="mono">term_deal_category</td><td>business term</td><td class="r">0.37</td></tr>
     </table></div>
-    <p>“bank” also matched a column of the FDIC history. That is fine: in the next step the deals table wins the vote. “happened” matched nothing and was saved as an alias suggestion.</p>
+    <p>“happened” matched nothing and was saved as an alias suggestion.</p>
   </div>
   <p class="note warn">If nothing matches, neo stops here and asks which table you mean (status <code>needs_clarification</code>). The LLM is never asked to guess.</p>
   <p class="saved">Saved: <code>steps/retrieve.json</code>.</p>
@@ -316,7 +323,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
     <li><b>Writes it as text.</b> This briefing is everything the LLM learns about your data. It contains no data rows.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <p>Main table <code>deal</code> (the FDIC history lost the vote). 0 columns hidden. 7 constraints from your ontology. An excerpt of what the LLM reads:</p>
+    <p>Main table <code>deal</code>, the only table. 0 columns hidden. 7 constraints from your ontology. An excerpt of what the LLM reads:</p>
 <pre>- entity `deal`: Deal (bank that ended up in JPMorgan Chase). One row per target bank; key `target_cert`;
   time field effective_date. 955 banks that ended up inside JPMorgan Chase, 1970-2023 (FDIC BankFind).
     year [term_deal_year]: number, years | bigint, filled 100%, range 1970 to 2023
@@ -329,16 +336,38 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <p class="saved">Saved: the briefing text, in <code>steps/retrieve.json</code>.</p>
 </section>
 
+<section class="step" id="s4">
+  <div class="step-head"><span class="num">4</span><h3>List the requirements</h3><div class="meta"><span class="chip c-llm">LLM</span><span class="chip ok">new</span></div></div>
+  <p class="one">A second, separate LLM job reads only your question and the briefing, and writes down what any correct answer must respect. It never sees the model that will answer the question.</p>
+  <ul>
+    <li><b>Small typed claims,</b> each one checkable by a program: whose rows (universe), which conditions the rows must meet (filters), what is computed (measure), one result per what (group), and any ranking (order).</li>
+    <li><b>Written in the model language,</b> so code can run them: a filter is a real condition such as <code>year &gt;= 1980 and year &lt; 1990</code>.</li>
+    <li><b>Kept apart on purpose.</b> If the model writer misreads your question, this writer, working alone, is unlikely to misread it the same way. The web page shows the list as “I understood the question as”, so you can correct it.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <div class="scroll"><table>
+      <tr><th>Id</th><th>Kind</th><th>Requirement</th><th>As code</th></tr>
+      <tr><td>R1</td><td>universe</td><td>the rows are deals</td><td class="mono">entity deal</td></tr>
+      <tr><td>R2</td><td>filter</td><td>only failed-bank deals</td><td class="mono">deal_category == 'Assisted / failed-bank deal'</td></tr>
+      <tr><td>R3</td><td>filter</td><td>in the 1980s</td><td class="mono">year &gt;= 1980 and year &lt; 1990</td></tr>
+      <tr><td>R4</td><td>measure</td><td>the answer is a count</td><td class="mono">count</td></tr>
+    </table></div>
+    <p>Note that R2 and R3 are written differently from the model in step 5. That is the point: the check in step 12 proves they mean the same rows.</p>
+  </div>
+  <p class="note">If no LLM is configured for this job (<code>llm.tasks.requirements</code>), the step is skipped and the claim ledger says the meaning was not checked.</p>
+  <p class="saved">Saved: <code>steps/requirements.json</code>.</p>
+</section>
+
 <!-- ======================= FORMALISE ======================= -->
 <div class="phase"><span class="label">Phase 2</span><h2>Turn it into a precise model</h2><p>The only creative step. The LLM writes the recipe; code checks every part of it before a single query runs.</p></div>
 
-<section class="step" id="s4">
-  <div class="step-head"><span class="num">4</span><h3>Write the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
-  <p class="one">Claude rewrites the question as a small, precise model: which rows, which formula, and which kind of answer.</p>
+<section class="step" id="s5">
+  <div class="step-head"><span class="num">5</span><h3>Write the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+  <p class="one">Claude rewrites the question as a small, precise model: which rows, which formula, and which kind of answer. For a question with several parts it writes a <b>plan</b>: one small model per part, combined at the end.</p>
   <ul>
     <li><b>What Claude receives:</b> its role (“you never compute answers and never see raw data”), the manual on writing models, the list of allowed functions, the briefing, and your question.</li>
     <li><b>Checks before sending:</b> the request must contain no data rows; the user's daily token budget (2,000,000 for Admin) must not be used up. Rate-limit errors are retried. Every call is logged with its token count and time.</li>
-    <li><b>What comes back:</b> a JSON model. Its <i>form</i> says what kind of answer this is: a number (value), a table, a top or bottom item (extremum), a list (set), a yes/no check, “is this possible?” (feasibility), “what is the best value?” (optimisation), or “the data cannot answer this”.</li>
+    <li><b>What comes back:</b> a JSON model. Its <i>form</i> says what kind of answer this is: a number (value), a table, a top or bottom item (extremum), a list (set), a yes/no check, “is this possible?” (feasibility), “what is the best value?” (optimisation), several parts combined (plan), or “the data cannot answer this”.</li>
     <li><b>Grounding:</b> the model also lists the business terms it relied on and how it handled each enforced rule.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
@@ -355,8 +384,8 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <p class="saved">Saved: <code>attempts/attempt_1.json</code>, and the LLM call in the call log.</p>
 </section>
 
-<section class="step" id="s5">
-  <div class="step-head"><span class="num">5</span><h3>Check the model</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s6">
+  <div class="step-head"><span class="num">6</span><h3>Check the model</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">Before any query runs, neo checks the model against the ontology and the user's rights, and collects every problem, not just the first.</p>
   <div class="scroll"><table>
     <tr><th>Check</th><th>What it stops</th></tr>
@@ -373,14 +402,14 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   <div class="ex"><span class="label">In the example</span>
     <p>Passed on the first attempt. One enforced rule from your ontology applied: <code>con_failed_bank_definition</code>, because the question says “failed bank”. The model marked it applied (“counted with deal_category, not the failure_* columns”). Without that line, the model would have been sent back.</p>
   </div>
-  <p class="note warn"><b>If it fails:</b> the full list of errors goes back to Claude with “The model was rejected. Fix every problem below.” Claude gets up to 3 fixes (4 attempts in all). Problems found while compiling or proving (steps 6 to 8) go back the same way. If it still fails, the status is <code>no_model</code> and you see the last problems. No answer is invented.</p>
+  <p class="note warn"><b>If it fails:</b> the full list of errors goes back to Claude with “The model was rejected. Fix every problem below.” Claude gets up to 3 fixes (4 attempts in all). Problems found while compiling or proving (steps 7 to 9), and requirements the model does not meet (step 12), go back the same way. If it still fails, the status is <code>no_model</code> and you see the last problems. No answer is invented.</p>
 </section>
 
 <!-- ======================= COMPUTE AND PROVE ======================= -->
 <div class="phase"><span class="label">Phase 3</span><h2>Compute and prove</h2><p>The lake calculates, Z3 proves, Lean checks Z3, and a second program recomputes the answer. All four must agree.</p></div>
 
-<section class="step" id="s6">
-  <div class="step-head"><span class="num">6</span><h3>Compile to exact SQL</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s7">
+  <div class="step-head"><span class="num">7</span><h3>Compile to exact SQL</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">The model becomes SQL, written so that no number is ever rounded.</p>
   <ul>
     <li><b>Real tables:</b> table names come from the ontology and point at the frozen snapshot, not the live table.</li>
@@ -392,15 +421,15 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; max-width: 7
   </ul>
   <div class="ex"><span class="label">In the example</span>
 <pre>SELECT COUNT(*)                                                   -- the number of deals
-FROM s_4a1cb2ceb8871c88."deals" t0                                -- the frozen snapshot
+FROM s_6044484e82ce6e90."deals" t0                                -- the frozen snapshot
 WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted_failed, from the ontology
            AND 1980 - t0."year" &lt;= 0                             -- 1980 &lt;= year, written as a difference
            AND t0."year" - 1989 &lt;= 0, FALSE)                     -- year &lt;= 1989</pre>
   </div>
 </section>
 
-<section class="step" id="s7">
-  <div class="step-head"><span class="num">7</span><h3>Compute in the lake</h3><div class="meta"><span class="chip c-lake">Data lake</span></div></div>
+<section class="step" id="s8">
+  <div class="step-head"><span class="num">8</span><h3>Compute in the lake</h3><div class="meta"><span class="chip c-lake">Data lake</span></div></div>
   <p class="one">DuckDB runs the SQL inside the data lake. This is where every number in the answer is calculated.</p>
   <ul>
     <li><b>Counts first:</b> how many rows the user can see, and how many pass the filter.</li>
@@ -417,15 +446,16 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
   <p class="saved">Saved: every query with its purpose, time and row count, in <code>proof.json</code>.</p>
 </section>
 
-<section class="step" id="s8">
-  <div class="step-head"><span class="num">8</span><h3>Prove with Z3</h3><div class="meta"><span class="chip c-z3">Z3</span></div></div>
+<section class="step" id="s9">
+  <div class="step-head"><span class="num">9</span><h3>Prove with Z3</h3><div class="meta"><span class="chip c-z3">Z3</span></div></div>
   <p class="one">Z3 checks that the answer is the only value possible. How it does that depends on the kind of question.</p>
   <ul>
     <li><b>A number:</b> Z3 is told “answer = the exact number from the lake”, then asked “could the answer be anything else?”. It replies <i>unsat</i>, meaning impossible. That is the proof.</li>
     <li><b>A table:</b> each cell is proved the same way.</li>
     <li><b>Top or bottom:</b> for each rank, a query counts the rows strictly better. The count must match the candidates, so nothing outside the ranking beats it.</li>
     <li><b>A yes/no claim about rows:</b> a query searches every row for one that breaks the claim. None found means it holds on this snapshot.</li>
-    <li><b>Questions with unknowns</b> (“what is the best value?”, “is this possible?”): Z3 solves for the unknowns, with one rule per row. Up to 5,000 rows it sees every row at once; above that it works in rounds (refinement). Your tables have 955 and 510 rows, so Z3 always sees every row.</li>
+    <li><b>Questions with unknowns</b> (“what is the best value?”, “is this possible?”): Z3 solves for the unknowns, with one rule per row. Up to 5,000 rows it sees every row at once; above that it works in rounds (refinement). Your table has 955 rows, so Z3 always sees every row.</li>
+    <li><b>A plan:</b> each part is a number, proved as above on its own; then the parts are combined with exact fractions and Z3 proves each combined value.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
 <pre>(declare-fun ans () Real)            ; an unknown called ans
@@ -433,34 +463,37 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
 (assert (distinct (to_real 132) ans)) ; ...and ans is something else?
 → unsat: no other value is possible</pre>
   </div>
-  <div class="ex"><span class="label">A question with an unknown: the cost JPMorgan could absorb</span>
-    <p><i>“What is the largest extra quarterly cost JPMorgan could have absorbed in every quarter since 2010?”</i> The model uses the approved history window <code>ss_jpm_since_2010</code> (66 real quarters from the FDIC data) and one unknown, <code>cost_B</code>. Each quarter gives Z3 one rule: pre-tax income minus the cost (scaled by that quarter's assets against today's $4.09 trillion) must stay at or above zero.</p>
+  <div class="ex"><span class="label">A question with two parts: a plan</span>
+    <p><i>“Were failed-bank targets in Texas in the 1980s bigger on average than voluntary ones?”</i> The model is a plan with two small parts and one combination:</p>
     <div class="scroll"><table>
-      <tr><th class="r">Quarters Z3 saw</th><th class="r">Best cost per quarter</th><th>Deciding quarter</th><th class="r">Quarters that break it</th></tr>
-      <tr><td class="r">66</td><td class="r mono">$2.968165 billion</td><td>Q1 2020: $1.95B pre-tax on $2.69T assets</td><td class="r">0</td></tr>
+      <tr><th>Part</th><th>What it computes</th><th class="r">Rows</th><th class="r">Proved value</th></tr>
+      <tr><td>N1</td><td>average pre-deal assets, Texas failed-bank targets, 1980–1989, blanks left out</td><td class="r">79</td><td class="r mono">$425.899177 million</td></tr>
+      <tr><td>N2</td><td>the same for voluntary targets</td><td class="r">125</td><td class="r mono">$122.942944 million</td></tr>
+      <tr><td>failed_bigger</td><td class="mono">N1 &gt; N2</td><td></td><td class="r mono">true</td></tr>
+      <tr><td>ratio</td><td class="mono">N1 / N2</td><td></td><td class="r mono">3.464202</td></tr>
     </table></div>
-    <p>Two final proofs follow: no larger cost satisfies every quarter (unsat), and $2.968165 billion is actually reachable. The exact answer is the fraction 81548095599633 / 27474250000000, never rounded inside the proof.</p>
+    <p>Each part was proved and recomputed on its own, so a mistake in one part would be reported for that part only. The exact values are fractions: N1 = 6729207 / 15800 and N2 = 3841967 / 31250.</p>
   </div>
 </section>
 
-<section class="step" id="s9">
-  <div class="step-head"><span class="num">9</span><h3>Re-check with Lean</h3><div class="meta"><span class="chip c-lean">Lean</span></div></div>
+<section class="step" id="s10">
+  <div class="step-head"><span class="num">10</span><h3>Re-check with Lean</h3><div class="meta"><span class="chip c-lean">Lean</span></div></div>
   <p class="one">Z3 is fast, but its “unsat” has to be trusted. Lean, a proof checker with a small trusted core, re-checks what Z3 decided using exactly the same formulas.</p>
   <ul>
     <li><b>neo writes Z3's conclusions as Lean theorems</b> in a new file for this run.</li>
     <li><b>Facts about numbers</b> are checked by Lean's core recomputing the exact fractions itself (<code>decide +kernel</code>). If Lean disagrees with Z3, the run goes to human review.</li>
     <li><b>Facts “for every value”</b>, such as “no larger cut is allowed”, are proved by Lean's automatic prover (<code>grind</code>) from only the rows that decide the answer.</li>
-    <li><b>General theorems</b> in <code>lean/Neo</code>, proved once for all runs (21 of them), explain why a result checked on some rows holds for every row.</li>
+    <li><b>General theorems</b> in <code>lean/Neo</code>, proved once for all runs (38 of them), explain why a result checked on some rows holds for every row, why a rounded number is honest, and why proved parts give the combined value.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <p>1 theorem: 132 is exactly what the lake's count gives. <span class="chip ok">checked</span> in 2.0 s. It relies on the library theorems <code>unique_of_unsat</code>, <code>sum_const_den</code> and <code>cmp_sign</code>.</p>
-    <p>For the cost question, Lean checked 4 theorems with 69 facts: the optimum satisfies all 66 quarters, and the key one says that for every possible cost, the Q1 2020 quarter alone forces it to be at most $2.968165 billion.</p>
+    <p>1 theorem: 132 is exactly what the lake's count gives. <span class="chip ok">checked</span> in 2.1 s. It relies on the library theorems <code>unique_of_unsat</code>, <code>sum_const_den</code> and <code>cmp_sign</code>.</p>
+    <p>For the Texas plan, Lean checked the two parts' values and the combination: given N1 and N2, “N1 &gt; N2” and the ratio 3.464202… follow exactly (library theorem <code>Neo.Compose.combine_value</code>).</p>
   </div>
   <p class="note">If Lean is not installed, or <code>lean.enabled</code> is off, this step is skipped and the certificate does not mention it.</p>
 </section>
 
-<section class="step" id="s10">
-  <div class="step-head"><span class="num">10</span><h3>Recompute another way</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s11">
+  <div class="step-head"><span class="num">11</span><h3>Recompute another way</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">A second, separate program recomputes the answer from the raw columns, without the SQL compiler. The two results must agree.</p>
   <ul>
     <li><b>Up to 300,000 rows:</b> Python reads the raw columns of the same snapshot and evaluates the model with exact fractions.</li>
@@ -470,23 +503,46 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
   <div class="ex"><span class="label">In the example</span><p>Exact recomputation over the 955 deals. <span class="chip ok">matched</span></p></div>
 </section>
 
+<section class="step" id="s12">
+  <div class="step-head"><span class="num">12</span><h3>Check the meaning</h3><div class="meta"><span class="chip c-lake">Data lake</span><span class="chip c-z3">Z3</span><span class="chip ok">new</span></div></div>
+  <p class="one">Steps 7 to 11 prove the answer is right <i>for the model</i>. This step checks that the model means what you asked, by testing it against each requirement from step 4.</p>
+  <ul>
+    <li><b>Filters, on the real rows:</b> the lake counts rows the model keeps that a requirement excludes. It must be 0, or the model answers about rows you did not ask about.</li>
+    <li><b>Nothing left out:</b> the lake also counts rows your question includes that the model drops. That is allowed only when each such row is missing a value the model needs (for example a blank pre-deal size), and the ledger says so.</li>
+    <li><b>Filters, for every possible row:</b> Z3 tries to prove “model's filter → requirement” for any values at all, not only today's data. When it does, the statement becomes a small Lean theorem, checked in step 17.</li>
+    <li><b>Universe, measure, grouping, ranking:</b> compared with the model's structure (a count must be a count, “per state” must be grouped by state).</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <div class="scroll"><table>
+      <tr><th>Requirement</th><th>Check</th><th class="r">Rows that break it</th><th>Result</th></tr>
+      <tr><td>R1 deals</td><td>the model's universe</td><td class="r">—</td><td><span class="chip ok">matched</span></td></tr>
+      <tr><td>R2 failed-bank only</td><td>lake count, then Z3: model → R2 for every row</td><td class="r">0</td><td><span class="chip ok">matched</span></td></tr>
+      <tr><td>R3 1980s</td><td>lake count, then Z3: model → R3 for every row</td><td class="r">0</td><td><span class="chip ok">matched</span></td></tr>
+      <tr><td>R4 a count</td><td>the model's target</td><td class="r">—</td><td><span class="chip ok">matched</span></td></tr>
+      <tr><td>R2 + R3 together</td><td>rows the question includes that the model drops</td><td class="r">0</td><td><span class="chip ok">matched</span></td></tr>
+    </table></div>
+    <p>The model wrote <code>is_assisted_failed and 1980 &lt;= year &lt;= 1989</code>; the requirements said <code>deal_category == '…'</code> and <code>year &lt; 1990</code>. Z3 expanded the ontology formula and proved the model never keeps a row the requirements exclude.</p>
+  </div>
+  <p class="note warn"><b>If it fails:</b> “the model is valid but does not answer the question as asked” goes back to the model writer with each unmet requirement and the row count, and the model is fixed like any other error. If the last attempt still fails, the answer is kept but sent to human review.</p>
+</section>
+
 <!-- ======================= EXPLAIN AND DELIVER ======================= -->
 <div class="phase"><span class="label">Phase 4</span><h2>Explain and deliver</h2><p>The LLM double-checks its own reading of the question, code writes down the facts, and the LLM turns those facts into an answer.</p></div>
 
-<section class="step" id="s11">
-  <div class="step-head"><span class="num">11</span><h3>Review the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+<section class="step" id="s13">
+  <div class="step-head"><span class="num">13</span><h3>Review the model</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
   <p class="one">Claude re-reads its model next to a summary of the result, and either approves it or proposes a fix.</p>
   <ul>
     <li><b>What Claude sees:</b> its model and a summary (the answer, row counts, checks). No rows, and no Z3 or Lean files.</li>
     <li><b>What it asks itself:</b> Is this the exact question? The right columns for each term? Units converted? No double counting? Is the result plausible? A zero, for example, may mean a misspelled category.</li>
-    <li><b>Its reply:</b> “ok”, or “revise” with a corrected model. A revised model goes through steps 5 to 10 again, and replaces the original only if it passes.</li>
+    <li><b>Its reply:</b> “ok”, or “revise” with a corrected model. A revised model goes through steps 6 to 12 again, and replaces the original only if it passes, requirements included.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span><p>Verdict: ok.</p></div>
   <p class="saved">Saved: <code>steps/review.json</code>.</p>
 </section>
 
-<section class="step" id="s12">
-  <div class="step-head"><span class="num">12</span><h3>Write the certificate</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s14">
+  <div class="step-head"><span class="num">14</span><h3>Write the certificate</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">Code writes the proof certificate: the complete record of what was asked, how it was computed and how it was proved.</p>
   <ul>
     <li>The question, the interpretation, the form, the status, and how many rows were used out of how many visible.</li>
@@ -494,6 +550,8 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
     <li>The model: table, joins, filters, definitions, and which numbers were stated rather than taken from data.</li>
     <li>Each rule applied or not applicable, with the reason.</li>
     <li>Every check and its result, including Z3, Lean and the independent recomputation.</li>
+    <li>Each requirement from step 4 and whether the model met it (step 12).</li>
+    <li>The values the answer may cite, by name, for the slots in step 15.</li>
     <li>Caveats: missing values skipped, row limits applied, approximations.</li>
     <li>Where it came from: snapshot, ontology version, rules cited, the LLM used, the user and the run id.</li>
   </ul>
@@ -501,24 +559,62 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
   <p class="saved">Saved: <code>certificate.md</code>.</p>
 </section>
 
-<section class="step" id="s13">
-  <div class="step-head"><span class="num">13</span><h3>Write the answer</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
-  <p class="one">Claude writes the answer for a business reader, using only facts and numbers from the certificate.</p>
+<section class="step" id="s15">
+  <div class="step-head"><span class="num">15</span><h3>Write the answer</h3><div class="meta"><span class="chip c-llm">LLM</span></div></div>
+  <p class="one">Claude writes the answer for a business reader, using only facts from the certificate, and writes numbers as <b>slots</b> that code fills in.</p>
   <ul>
-    <li><b>Answer:</b> one or two sentences, with units and the time window.</li>
-    <li><b>How it was worked out:</b> 2 to 5 lines in plain words.</li>
-    <li><b>Proof:</b> what was proved, and whether the independent check matched. A mismatch must be stated as “not proved, under review”.</li>
-    <li><b>Scenarios</b> (when used): history shares as counts and percentages, with the window named.</li>
-    <li><b>Caveats:</b> missing values, row limits, assumptions.</li>
+    <li><b>Slots, not typed digits:</b> Claude writes <code>{{answer}}</code> or <code>{{N1|raw|1}}</code>; code fills each one from the exact proved value, in the unit asked. A copied number cannot be wrong.</li>
+    <li><b>A list of claims:</b> next to the text, Claude lists every claim it makes: numbers, comparisons (“bigger than”), values it worked out, which rows the answer covers, caveats, and anything that is an opinion.</li>
+    <li><b>Sections:</b> the answer, how it was worked out, what was proved, and caveats. Every caveat the ontology requires for this question is listed for Claude to include.</li>
   </ul>
   <div class="ex"><span class="label">In the example</span>
-    <p>No API key was set when this run was made, so this step used a placeholder text. Every number above was still computed and proved. With Claude connected, this step writes the answer from the certificate.</p>
+<pre>"**{{answer}} failed-bank deals** took effect from 1980 to 1989, out of {{universe_rows}} deals …"
+→ "**132 failed-bank deals** took effect from 1980 to 1989, out of 955 deals in the file (… about 13.8%)."</pre>
+    <p>No API key was set for this run, so the answer text was scripted; every step that checks it ran for real.</p>
   </div>
-  <p class="saved">Saved: <code>answer.md</code>.</p>
+  <p class="saved">Saved: <code>steps/answer.json</code>, with every draft.</p>
 </section>
 
-<section class="step" id="s14">
-  <div class="step-head"><span class="num">14</span><h3>Route for review</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s16">
+  <div class="step-head"><span class="num">16</span><h3>Check the answer</h3><div class="meta"><span class="chip c-code">Code</span><span class="chip ok">new</span></div></div>
+  <p class="one">Before you read a word, code checks every claim in the answer. Wrong claims go back to Claude; what still fails is removed.</p>
+  <div class="scroll"><table>
+    <tr><th>Kind of claim</th><th>How it is checked</th></tr>
+    <tr><td>A number in a slot</td><td>Filled from the proved value, so it is right by construction</td></tr>
+    <tr><td>Any other number</td><td>Found by a scan of the whole text, so an unlisted claim is still caught. It must be a proved value at the precision shown (units converted), one proved number as a share of another, a number in the certificate, or a number from your question</td></tr>
+    <tr><td>A comparison</td><td>Recomputed exactly on the proved values</td></tr>
+    <tr><td>A worked-out value</td><td>The arithmetic is redone with exact fractions, and the rounding checked</td></tr>
+    <tr><td>Which rows it covers</td><td>Must cite requirements that step 12 matched</td></tr>
+    <tr><td>A caveat the ontology requires</td><td>Must be there; if still missing after the repairs, code adds it from the ontology's own text</td></tr>
+    <tr><td>A new fact, an opinion</td><td>A fact not in the certificate is unsupported; an opinion is labelled as not checkable</td></tr>
+  </table></div>
+  <ul>
+    <li><b>Repairs:</b> the problems go back to Claude with the exact reason, for example “A1 says 123, the proved value is 132” (up to 2 fixes).</li>
+    <li><b>Then removal:</b> a sentence with a claim that still fails is removed, and the answer says how many sentences were removed. The run goes to review.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <p>Every claim passed: the slots 132 and 955; the years 1980 and 1989 (from the model); 13.8% recomputed as 132 / 955 = 0.13822; and the scope claim, citing R2 and R3, which step 12 matched.</p>
+    <p>In the Texas plan, the ontology's caveat <code>con_pre_deal_coverage</code> (pre-deal assets are missing for 145 rows) applies because the model reads pre-deal assets. The scripted answer left it out, so code added it from the ontology's text.</p>
+  </div>
+</section>
+
+<section class="step" id="s17">
+  <div class="step-head"><span class="num">17</span><h3>Claim ledger</h3><div class="meta"><span class="chip c-code">Code</span><span class="chip c-lean">Lean</span><span class="chip ok">new</span></div></div>
+  <p class="one">One table of every claim in the run: who made it, what checked it, and the result. Lean then checks the small claim theorems.</p>
+  <ul>
+    <li><b>From the question:</b> each requirement and whether the model met it.</li>
+    <li><b>From the model:</b> each result, or each part of a plan, with its proof status.</li>
+    <li><b>From the answer:</b> each claim and its check.</li>
+    <li><b>One small theorem per claim:</b> “the shown 132 is the exact value” (<code>rounds_*</code>), “13.8% is 132 / 955, rounded honestly” (<code>derived_*</code>), “the model keeps only rows that meet R2” (<code>fidelity_R2</code>). Lean's kernel checks them all in one run.</li>
+  </ul>
+  <div class="ex"><span class="label">In the example</span>
+    <p>16 rows in the ledger, all passed. Lean checked 7 claim theorems in 2.7 s: 2 about the meaning (R2, R3), 4 about rounding, and 1 about the derived percentage. The ledger is added to the certificate.</p>
+  </div>
+  <p class="saved">Saved: <code>steps/ledger.json</code>, and the ledger at the end of <code>certificate.md</code>.</p>
+</section>
+
+<section class="step" id="s18">
+  <div class="step-head"><span class="num">18</span><h3>Route for review</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">Code decides whether a person must look at the answer before it is trusted.</p>
   <p>A run goes to the review queue when any of these is true:</p>
   <ul>
@@ -529,12 +625,14 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
     <li>A backtest contradicts real past events.</li>
     <li>The table belongs to a high-impact area (regulatory, board).</li>
     <li>4 or more enforced rules shaped the model.</li>
+    <li>The model still does not meet a requirement after the repairs (step 12).</li>
+    <li>The answer check had to remove a claim, or Lean rejected a claim theorem (steps 16 and 17).</li>
   </ul>
   <div class="ex"><span class="label">In the example</span><p>No reasons, so the answer was delivered straight away. Admin is the only user who can approve reviews.</p></div>
 </section>
 
-<section class="step" id="s15">
-  <div class="step-head"><span class="num">15</span><h3>Save and audit</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
+<section class="step" id="s19">
+  <div class="step-head"><span class="num">19</span><h3>Save and audit</h3><div class="meta"><span class="chip c-code">Code</span></div></div>
   <p class="one">Everything is written to disk, so the run can be inspected, replayed and audited later.</p>
   <div class="scroll"><table>
     <tr><th>File in <code>var/runs/&lt;run id&gt;/</code></th><th>What it holds</th></tr>
@@ -543,7 +641,7 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
     <tr><td class="mono">certificate.md</td><td>The proof certificate</td></tr>
     <tr><td class="mono">answer.md</td><td>The answer with the certificate</td></tr>
     <tr><td class="mono">trace.json</td><td>How long each step took</td></tr>
-    <tr><td class="mono">steps/, attempts/</td><td>Each step's output and every model the LLM tried</td></tr>
+    <tr><td class="mono">steps/, attempts/</td><td>Each step's output (requirements, answer drafts, claim ledger) and every model the LLM tried, with its fidelity results</td></tr>
   </table></div>
   <ul>
     <li><b>Audit log:</b> “answer delivered”, with user, status, snapshot and tables used.</li>
@@ -551,7 +649,7 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
     <li><b>Replay on today's data:</b> the same model on the latest data and ontology.</li>
     <li><b>Feedback:</b> a thumbs up or down with a comment, stored with the run.</li>
   </ul>
-  <div class="ex"><span class="label">In the example</span><p>Total time 2.0 s, most of it the Lean check. Open it in the UI's Ask tab: <code>run_20261103191750_8edc80a0</code>.</p></div>
+  <div class="ex"><span class="label">In the example</span><p>Total time 4.9 s, most of it the two Lean checks. Open it in the UI's Ask tab: <code>run_20261105105653_94112983</code>.</p></div>
 </section>
 
 <!-- ======================= REFERENCE ======================= -->
@@ -567,7 +665,7 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
     <tr><td><span class="chip c-code">undefined</span></td><td>No eligible row had a value</td></tr>
     <tr><td><span class="chip c-code">not_expressible</span></td><td>The data cannot answer this, and the LLM says so</td></tr>
     <tr><td><span class="chip c-llm">needs_clarification</span></td><td>The question could not be linked to any table (step 2)</td></tr>
-    <tr><td><span class="chip c-llm">needs_approval</span></td><td>The query is too large for the user (step 5)</td></tr>
+    <tr><td><span class="chip c-llm">needs_approval</span></td><td>The query is too large for the user (step 6)</td></tr>
     <tr><td><span class="chip bad">mismatch</span></td><td>The independent recomputation disagreed: not proved, sent for review</td></tr>
     <tr><td><span class="chip bad">no_model</span></td><td>No valid model after 4 attempts, so no answer is given</td></tr>
     <tr><td><span class="chip bad">llm_error</span></td><td>The language model could not be reached or failed</td></tr>
@@ -579,12 +677,16 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
   <dl>
     <dt>Ontology</dt><dd>The company's dictionary of its data: what each table and column means, in which unit, and which rules apply.</dd>
     <dt>Term</dt><dd>A business word with a definition, such as failed-bank deal or deal year. Columns are linked to terms.</dd>
-    <dt>Entity</dt><dd>A kind of thing with its own table: a deal (jp_morgan.csv) or a bank quarter (FDIC history).</dd>
+    <dt>Entity</dt><dd>A kind of thing with its own table. Here there is one: a deal, one row per bank that ended up inside JPMorgan Chase (jp_morgan.csv).</dd>
     <dt>Constraint</dt><dd>A business rule in the ontology. “Block” rules must be addressed by the model; “info” rules are background.</dd>
     <dt>Snapshot</dt><dd>A frozen version of every table, so a run always reads the same data.</dd>
     <dt>Briefing</dt><dd>The short extract of the ontology the LLM reads for one question. It has no data rows.</dd>
     <dt>Model</dt><dd>The LLM's precise version of the question: which rows, which formula, which kind of answer.</dd>
-    <dt>Form</dt><dd>The kind of answer: value, table, extremum, set, check, feasibility, optimisation, or not expressible.</dd>
+    <dt>Form</dt><dd>The kind of answer: value, table, extremum, set, check, feasibility, optimisation, plan, or not expressible.</dd>
+    <dt>Requirement</dt><dd>A small, checkable statement of what the question needs, written by a separate LLM that never sees the model.</dd>
+    <dt>Fidelity check</dt><dd>Testing the model against each requirement, on the real rows and, with Z3, for every possible row.</dd>
+    <dt>Slot</dt><dd>A placeholder like <code>{{answer}}</code> in the answer text, filled by code from the exact proved value.</dd>
+    <dt>Claim ledger</dt><dd>The table of every claim in a run, who made it, what checked it, and the result.</dd>
     <dt>Grounding</dt><dd>The part of the model that cites the terms used and says how each enforced rule was handled.</dd>
     <dt>Row limit (row policy)</dt><dd>A filter added by code for users who may see only some rows. Admin has none.</dd>
     <dt>Exact fraction</dt><dd>A number kept as a whole-number top and bottom, so nothing is ever rounded.</dd>
@@ -597,7 +699,7 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
 </main>
 </div>
 
-<footer>Numbers on this page come from runs <code>run_20261103191750_8edc80a0</code> (failed-bank deals) and <code>run_20261103191752_5050eb2a</code> (the cost question) on snapshot <code>snap_4a1cb2ceb8871c88</code> and ontology version v0002-0b6222eb. The data is real only: jp_morgan.csv and FDIC quarterly history.</footer>
+<footer>Numbers on this page come from runs <code>run_20261105105653_94112983</code> (failed-bank deals) and <code>run_20261105105658_2d2c9969</code> (the Texas plan) on snapshot <code>snap_6044484e82ce6e90</code> and ontology version v0003-ddf412f2. The data is real only: jp_morgan.csv, 955 rows. The answer texts were scripted (no API key); every check on them ran for real.</footer>
 </div>
 
 <script>
@@ -616,5 +718,6 @@ WHERE COALESCE(t0."deal_category" = 'Assisted / failed-bank deal' -- is_assisted
   byId.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
 })();
 </script>
+
 </body>
 </html>

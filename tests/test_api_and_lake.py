@@ -92,8 +92,9 @@ def test_lint_checks_mappings_against_the_lake(neo):
     errors, _ = lint(doc, neo.catalog, neo.catalog.snapshot())
     assert not errors
     doc["fields"].append({"id": "fld_bad", "entity": "deal", "name": "ghost", "column": "no_such_column", "unit": "USD"})
-    doc["fields"].append({"id": "fld_bad2", "entity": "bank_quarter", "name": "net", "column": "NETINCQ", "unit": "dollars"})
-    doc["relations"].append({"id": "rel_bad", "kind": "join", "from_entity": "deal", "to_entity": "bank_quarter",
+    doc["fields"].append({"id": "fld_bad2", "entity": "deal", "name": "cost2", "column": "failure_cost_to_fdic_000",
+                          "unit": "dollars"})
+    doc["relations"].append({"id": "rel_bad", "kind": "join", "from_entity": "deal", "to_entity": "deal",
                              "on": [["target_cert", "nope"]], "cardinality": "many_to_one"})
     e = " | ".join(lint(doc, neo.catalog, neo.catalog.snapshot())[0])
     assert "no_such_column" in e and "unknown unit `dollars`" in e and "join keys" in e

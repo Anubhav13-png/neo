@@ -1,5 +1,5 @@
 # Local stack: one API (with 2 in-process workers) and one extra worker, sharing the lake and run store.
-# First run:  docker compose run --rm api neo init     (needs the deals CSV mounted; FDIC history is downloaded)
+# First run:  docker compose run --rm api neo init     (needs the deals CSV mounted)
 services:
   api:
     build: .

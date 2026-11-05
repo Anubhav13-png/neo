@@ -9,7 +9,7 @@ from neo.llm.gateway import LLMGateway
 from neo.llm.providers import ScriptedLLM
 from neo.orchestrator import Neo
 
-from conftest import FDIC_CACHE, ROOT, copy_ontology, direct, ground, make_cfg, script
+from conftest import ROOT, copy_ontology, direct, ground, make_cfg, script
 
 Q = "How many branches were transferred in failed-bank deals?"
 
@@ -77,7 +77,7 @@ def test_replay_pins_the_snapshot(tmp_path):
     os.makedirs(f"{d}/ontology")
     copy_ontology(f"{d}/ontology/source")
     neo = Neo(make_cfg(d))
-    init_demo(neo, fdic_cache=FDIC_CACHE, say=lambda *_: None)
+    init_demo(neo, say=lambda *_: None)
     script(neo, branches(neo), {"verdict": "ok"})
     r = neo.ask(Q, "demo")
     neo.catalog.write_from_sql(neo.engine.connection, "deals",               # a new version with doubled branches

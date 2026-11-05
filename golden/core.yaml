@@ -1,7 +1,9 @@
 # Golden questions: run `neo eval golden/core.yaml` (scripted: replays each model) or `--live` (asks the LLM).
 # `ontology publish --eval golden/core.yaml` makes a new ontology version current only if every case passes.
-# Deals answers are pinned (a fixed CSV); FDIC history cases check the status and the self-check.
+# All cases run on the deals CSV (955 rows); its answers are pinned.
 # A case without `user` runs as the first user in config/users.yaml.
+# `requirements` (optional) is what the requirements writer would list; in scripted mode it is replayed, and the
+# fidelity check proves the model meets each one.
 cases:
   - id: failed_deals_1980s
     question: How many failed-bank deals happened in the 1980s?
@@ -15,7 +17,12 @@ cases:
         terms: [term_deal_category, term_deal_year]
         constraints_applied:
           - {id: con_failed_bank_definition, how: "counted with deal_category, not the failure_* columns"}
-    expect: {status: proved, answer: 132, self_check: true}
+    requirements:
+      - {id: R1, kind: universe, text: the rows are deals, entity: deal}
+      - {id: R2, kind: filter, text: only failed-bank deals, expr: "deal_category == 'Assisted / failed-bank deal'"}
+      - {id: R3, kind: filter, text: in the 1980s, expr: "year >= 1980 and year < 1990"}
+      - {id: R4, kind: measure, text: the answer is a count, aggregate: count}
+    expect: {status: proved, answer: 132, self_check: true, fidelity: matched}
 
   - id: largest_deals
     question: Which three banks were largest before the deal, in billions?
@@ -70,30 +77,63 @@ cases:
         constraints_applied: [{id: con_failed_bank_definition, how: "deal_category flag"}]
     expect: {status: proved, self_check: true}
 
-  - id: jpm_profitable_share
-    question: How often were JPMorgan's insured banks profitable since 2000?
+  - id: direct_purchases_by_lead_bank
+    question: Was every direct purchase made by JPMorgan's lead bank, certificate 628?
     model:
-      form: value
-      interpretation: Of the quarters since 2000 Q1 for JPMorgan's insured banks, the number and the share with positive pre-tax income. A historical frequency, not a forecast.
-      universe: {entity: bank_quarter, scenario_set: ss_jpm_since_2000}
-      target: {columns: {quarters: "count()", profitable_share: "share(pretax_income > 0)"}}
+      form: check
+      interpretation: For every deal, generation 1 (a direct purchase) holds exactly when the acquirer certificate is 628.
+      universe: {entity: deal}
+      target: {scope: rows, claim: "(generation == 1) == (acquirer_cert == 628)"}
       grounding:
         constraints_applied:
-          - {id: con_scenario_history, how: "approved scenario set of real quarters; reported as a historical frequency"}
+          - {id: con_acquirer_not_jpm, how: "direct purchases are the generation 1 rows; others have intermediate buyers"}
+          - {id: con_group_by_cert, how: "the lead bank is matched by certificate 628, not by name"}
     expect: {status: proved, self_check: true}
 
-  - id: cost_jpm_could_absorb
-    question: What is the largest extra quarterly cost JPMorgan could have absorbed in every quarter since 2010?
+  - id: lowest_capital_ratio_voluntary
+    question: What is the highest equity-to-assets floor that every voluntary target met before its deal?
     model:
       form: optimisation
-      interpretation: The largest extra cost per quarter, scaled by each quarter's assets relative to today, that keeps pre-tax income at or above zero in every quarter since 2010 Q1 for JPMorgan's insured banks.
-      universe: {entity: bank_quarter, scenario_set: ss_jpm_since_2010}
-      parameters: {assets_now_B: {expr: "max_of(ASSET) / 1e6", unit: USD_billions}}
-      variables: [{name: cost_B, sort: Real, domain: "cost_B >= 0", unit: USD_billions}]
+      interpretation: The largest ratio r such that every voluntary M&A target with reported equity and positive pre-deal assets had pre-deal equity / pre-deal assets of at least r.
+      universe: {entity: deal}
+      rows: "deal_category == 'Voluntary M&A' and not_null(target_equity_pre_deal_000) and target_assets_pre_deal_000 > 0"
+      variables: [{name: r, sort: Real, domain: "r >= -100", unit: ratio}]
       constraints:
-        - {name: every_quarter, expr: "all_rows(pretax_income / 1e6 - cost_B * (ASSET / 1e6) / assets_now_B >= 0)"}
-      target: {objective: cost_B, sense: max}
+        - {name: every_target, expr: "all_rows(target_equity_pre_deal_000 / target_assets_pre_deal_000 >= r)"}
+      target: {objective: r, sense: max}
       grounding:
         constraints_applied:
-          - {id: con_scenario_history, how: "real quarters from an approved scenario set; cost scaled by assets"}
+          - {id: con_blank_numeric_sorting, how: "rows without pre-deal equity or assets are left out"}
+          - {id: con_units, how: "equity and assets are both in thousands, so the ratio has no unit"}
     expect: {status: optimal}
+
+  - id: texas_failed_vs_voluntary_size
+    question: Were failed-bank targets in Texas in the 1980s bigger on average than voluntary ones?
+    model:
+      form: plan
+      interpretation: Average pre-deal assets of Texas targets in deals from 1980 to 1989, failed-bank deals against voluntary deals, in $ millions, and whether the first is larger.
+      nodes:
+        N1:
+          form: value
+          interpretation: Average pre-deal assets in $ millions of Texas failed-bank targets, deals from 1980 to 1989, blanks left out.
+          universe: {entity: deal}
+          rows: "is_assisted_failed and target_state == 'TX' and 1980 <= year <= 1989 and not_null(target_assets_pre_deal_000)"
+          target: {expr: "avg(target_assets_pre_deal_000 / 1000)"}
+        N2:
+          form: value
+          interpretation: Average pre-deal assets in $ millions of Texas voluntary targets, deals from 1980 to 1989, blanks left out.
+          universe: {entity: deal}
+          rows: "deal_category == 'Voluntary M&A' and target_state == 'TX' and 1980 <= year <= 1989 and not_null(target_assets_pre_deal_000)"
+          target: {expr: "avg(target_assets_pre_deal_000 / 1000)"}
+      combine: {columns: {failed_bigger: "N1 > N2", ratio: "N1 / N2"}}
+      grounding:
+        constraints_applied:
+          - {id: con_failed_bank_definition, how: "deal_category flag"}
+          - {id: con_blank_numeric_sorting, how: "blank pre-deal assets are left out of each average"}
+          - {id: con_units, how: "thousands of dollars / 1000 = millions"}
+    requirements:
+      - {id: R1, kind: universe, text: the rows are deals, entity: deal}
+      - {id: R2, kind: filter, text: targets in Texas, expr: "target_state == 'TX'"}
+      - {id: R3, kind: filter, text: deals in the 1980s, expr: "1980 <= year <= 1989"}
+      - {id: R4, kind: measure, text: average size before the deal, aggregate: avg, of: target_assets_pre_deal_000}
+    expect: {status: proved, answer: {failed_bigger: true}, fidelity: matched}
